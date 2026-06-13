@@ -30,6 +30,18 @@ importers:
         specifier: 5.5.4
         version: 5.5.4
 
+  apps/outbox-poller:
+    dependencies:
+      '@flashbite/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@flashbite/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      kafkajs:
+        specifier: 2.2.4
+        version: 2.2.4
+
   apps/write-api:
     dependencies:
       '@flashbite/contracts':
