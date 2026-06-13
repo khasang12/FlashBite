@@ -1,0 +1,110 @@
+# FlashBite write-api — Phase 1a manual requests
+#
+# Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
+# Prereqs:
+#   pnpm infra:up          # Postgres + Redpanda running
+#   pnpm dev:write-api     # http://localhost:3001
+#   pnpm dev:outbox        # relays outbox -> order-events (optional, for the full flow)
+#
+# Note on random ids: {{$guid}} is the VS Code REST Client generator.
+# In JetBrains HTTP Client use {{$random.uuid}} instead.
+
+@baseUrl = http://localhost:3001
+@tenant = berlin
+# Fixed id so the "place" + "re-place" pair below exercises idempotency.
+@orderId = 21111111-1111-1111-1111-111111111112
+
+### Health — resolves tenant from the X-Tenant-ID header
+GET {{baseUrl}}/health
+X-Tenant-ID: {{tenant}}
+
+### Health — no header -> falls back to DEFAULT_TENANT_ID (berlin)
+GET {{baseUrl}}/health
+
+### Place an order (fixed id). Expect 201 { "orderId": "1111...1111" }
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "orderId": "{{orderId}}",
+  "customerId": "c-1",
+  "items": [{ "sku": "pizza", "qty": 1, "price": 1200 }],
+  "totalAmount": 1200
+}
+
+### Re-place the SAME order -> idempotent. Expect 201, same orderId,
+### and STILL exactly one event_store row + one outbox row (no duplicate).
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "orderId": "{{orderId}}",
+  "customerId": "c-1",
+  "items": [{ "sku": "pizza", "qty": 1, "price": 1200 }],
+  "totalAmount": 1200
+}
+
+### Place a FRESH random order each run. Expect 201 with a new orderId.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "orderId": "{{$guid}}",
+  "customerId": "c-2",
+  "items": [
+    { "sku": "burger", "qty": 2, "price": 950 },
+    { "sku": "fries", "qty": 1, "price": 400 }
+  ],
+  "totalAmount": 2300
+}
+
+### Different tenant (tokyo) — header-based tenant routing (Phase 1).
+### Lands under tenant_id=tokyo, partition key tokyo:<orderId>.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: tokyo
+
+{
+  "orderId": "{{$guid}}",
+  "customerId": "c-9",
+  "items": [{ "sku": "sushi", "qty": 3, "price": 800 }],
+  "totalAmount": 2400
+}
+
+### Validation: missing required fields -> 400 Bad Request
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "orderId": "bad-1"
+}
+
+### Validation: empty items array + bad types -> 400 Bad Request
+POST {{baseUrl}}/orders
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "orderId": "{{$guid}}",
+  "customerId": "c-3",
+  "items": [],
+  "totalAmount": -5
+}
+
+# ----------------------------------------------------------------------------
+# Verifying side effects (run in a shell after POSTing):
+#
+#   # event_store + outbox rows for the fixed order:
+#   docker exec $(docker compose -f infra/docker-compose.yml ps -q postgres) \
+#     psql -U flashbite -d flashbite_write \
+#     -c "select event_type, version from event_store where aggregate_id='11111111-1111-1111-1111-111111111111';" \
+#     -c "select status, partition_key from outbox where partition_key='berlin:11111111-1111-1111-1111-111111111111';"
+#
+#   # envelope on the topic (after dev:outbox relays it):
+#   docker exec $(docker compose -f infra/docker-compose.yml ps -q redpanda) \
+#     rpk topic consume order-events --brokers redpanda:29092 --num 5 --offset end:-5
+# ----------------------------------------------------------------------------
