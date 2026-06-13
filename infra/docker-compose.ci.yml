@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: local_dev_only_change_me
       POSTGRES_DB: flashbite_write
     ports:
-      - "5432:5432"
+      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flashbite -d flashbite_write"]
       interval: 5s

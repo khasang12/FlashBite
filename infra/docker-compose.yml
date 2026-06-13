@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: local_dev_only_change_me
       POSTGRES_DB: flashbite_write
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - pg_app_data:/var/lib/postgresql/data
     healthcheck:

@@ -9,7 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://flashbite:local_dev_only_change_me@localhost:5432/flashbite_write
+      DATABASE_URL: postgresql://flashbite:local_dev_only_change_me@localhost:5434/flashbite_write
       KAFKA_BROKERS: localhost:9092
     steps:
       - uses: actions/checkout@v4

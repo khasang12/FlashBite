@@ -8,7 +8,7 @@ const BROKERS = (process.env.KAFKA_BROKERS ?? "localhost:9092").split(",");
 
 const pgConfig = {
   host: process.env.PG_HOST ?? "localhost",
-  port: Number(process.env.PG_PORT ?? 5432),
+  port: Number(process.env.PG_PORT ?? 5434),
   user: process.env.PG_USER ?? "flashbite",
   password: process.env.PG_PASSWORD ?? "local_dev_only_change_me",
   database: process.env.PG_DB ?? "flashbite_write",
