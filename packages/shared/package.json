@@ -11,7 +11,8 @@
   "dependencies": {
     "@prisma/client": "5.18.0",
     "@nestjs/common": "10.4.4",
-    "mongodb": "6.8.0"
+    "mongodb": "6.8.0",
+    "ioredis": "5.4.1"
   },
   "devDependencies": {
     "prisma": "5.18.0"

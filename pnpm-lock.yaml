@@ -110,6 +110,9 @@ importers:
       '@prisma/client':
         specifier: 5.18.0
         version: 5.18.0(prisma@5.18.0)
+      ioredis:
+        specifier: 5.4.1
+        version: 5.4.1
       mongodb:
         specifier: 6.8.0
         version: 6.8.0
