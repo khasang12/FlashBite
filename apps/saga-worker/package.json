@@ -1,0 +1,21 @@
+{
+  "name": "@flashbite/saga-worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node -r @swc-node/register -r tsconfig-paths/register src/main.ts"
+  },
+  "dependencies": {
+    "@flashbite/contracts": "workspace:*",
+    "@flashbite/shared": "workspace:*",
+    "@prisma/client": "5.18.0",
+    "@temporalio/activity": "1.11.1",
+    "@temporalio/client": "1.11.1",
+    "@temporalio/worker": "1.11.1",
+    "@temporalio/workflow": "1.11.1",
+    "kafkajs": "2.2.4"
+  },
+  "devDependencies": {
+    "@temporalio/testing": "1.11.1"
+  }
+}

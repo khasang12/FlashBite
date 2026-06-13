@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { connectMongo, MongoHandle } from "@flashbite/shared";
+import { connectMongo, MongoHandle, buildEnvelope } from "@flashbite/shared";
 import {
-  buildEnvelope,
   EVENT_TYPES,
   READ_COLLECTIONS,
   type OrderPlacedPayload,
@@ -77,5 +76,46 @@ describe("applyEvent", () => {
     await mongo.db.collection(READ_COLLECTIONS.ORDERS).deleteOne({ _id: `berlin:${orderId}` as never });
     await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteOne({ _id: `berlin:projection-worker:${v2.eventId}` as never });
     await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteOne({ _id: `berlin:projection-worker:${v1.eventId}` as never });
+  });
+
+  it("transitions an existing order to ACCEPTED on OrderAccepted (v2)", async () => {
+    const orderId = randomUUID();
+    const place = placed(orderId);
+    await applyEvent(mongo.db, place); // v1 -> PLACED
+    const accepted = buildEnvelope({
+      tenantId: "berlin",
+      eventType: EVENT_TYPES.ORDER_ACCEPTED,
+      version: 2,
+      payload: { orderId },
+    });
+    const r = await applyEvent(mongo.db, accepted);
+    expect(r).toBe("applied");
+
+    const doc = await mongo.db.collection(READ_COLLECTIONS.ORDERS).findOne({ _id: `berlin:${orderId}` as never });
+    expect(doc?.status).toBe("ACCEPTED");
+    expect(doc?.version).toBe(2);
+
+    await mongo.db.collection(READ_COLLECTIONS.ORDERS).deleteOne({ _id: `berlin:${orderId}` as never });
+    await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteMany({ _id: { $in: [`berlin:projection-worker:${place.eventId}`, `berlin:projection-worker:${accepted.eventId}`] } } as never);
+  });
+
+  it("transitions an existing order to CANCELLED on OrderCancelled (v2)", async () => {
+    const orderId = randomUUID();
+    const place = placed(orderId);
+    await applyEvent(mongo.db, place);
+    const cancelled = buildEnvelope({
+      tenantId: "berlin",
+      eventType: EVENT_TYPES.ORDER_CANCELLED,
+      version: 2,
+      payload: { orderId, reason: "SLA_BREACH" },
+    });
+    await applyEvent(mongo.db, cancelled);
+
+    const doc = await mongo.db.collection(READ_COLLECTIONS.ORDERS).findOne({ _id: `berlin:${orderId}` as never });
+    expect(doc?.status).toBe("CANCELLED");
+    expect(doc?.version).toBe(2);
+
+    await mongo.db.collection(READ_COLLECTIONS.ORDERS).deleteOne({ _id: `berlin:${orderId}` as never });
+    await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteMany({ _id: { $in: [`berlin:projection-worker:${place.eventId}`, `berlin:projection-worker:${cancelled.eventId}`] } } as never);
   });
 });
