@@ -19,6 +19,7 @@ module.exports = {
   testEnvironment: "node",
   rootDir: ".",
   roots,
+  setupFiles: ["<rootDir>/jest.setup.cjs"],
   moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: "<rootDir>/" }),
   transform: {
     "^.+\\.ts$": [
