@@ -10,7 +10,9 @@
     "infra:ps": "docker compose -f infra/docker-compose.yml ps",
     "test": "jest",
     "dev:write-api": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/write-api/src/main.ts",
-    "dev:outbox": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/outbox-poller/src/main.ts"
+    "dev:outbox": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/outbox-poller/src/main.ts",
+    "dev:read-api": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/read-api/src/main.ts",
+    "dev:projection": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/projection-worker/src/main.ts"
   },
   "devDependencies": {
     "@swc-node/register": "^1.11.1",
