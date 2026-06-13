@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+# docker named-volume data never lives in-repo, but ignore stray dumps
+*.rdb
