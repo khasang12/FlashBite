@@ -2,7 +2,7 @@ name: flashbite-ci
 
 # Infra for CI — the services the test suite needs:
 # Postgres (event store/outbox), Redpanda (Kafka), MongoDB (read models),
-# Redis Cluster (read-api cache). Temporal is added when later phases add tests for it.
+# Redis Cluster (read-api cache), Temporal (saga orchestration).
 services:
   postgres:
     image: postgres:16-alpine
@@ -62,3 +62,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_SEEDS=temporal-postgres
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
