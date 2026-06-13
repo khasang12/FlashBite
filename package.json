@@ -9,16 +9,19 @@
     "infra:nuke": "docker compose -f infra/docker-compose.yml down -v",
     "infra:ps": "docker compose -f infra/docker-compose.yml ps",
     "test": "jest",
-    "dev:write-api": "tsx --tsconfig apps/write-api/tsconfig.json --env-file=.env apps/write-api/src/main.ts",
-    "dev:outbox": "tsx --tsconfig apps/outbox-poller/tsconfig.json --env-file=.env apps/outbox-poller/src/main.ts"
+    "dev:write-api": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/write-api/src/main.ts",
+    "dev:outbox": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/outbox-poller/src/main.ts"
   },
   "devDependencies": {
-    "typescript": "5.5.4",
-    "tsx": "4.16.2",
+    "@swc-node/register": "^1.11.1",
+    "@swc/core": "^1.15.41",
+    "@swc/helpers": "^0.5.23",
+    "@types/jest": "29.5.12",
     "@types/node": "20.14.12",
     "jest": "29.7.0",
     "ts-jest": "29.2.4",
-    "@types/jest": "29.5.12",
-    "tsconfig-paths": "4.2.0"
+    "tsconfig-paths": "4.2.0",
+    "tsx": "4.16.2",
+    "typescript": "5.5.4"
   }
 }

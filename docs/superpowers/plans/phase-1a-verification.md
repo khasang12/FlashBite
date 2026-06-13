@@ -13,7 +13,7 @@ Prereq: `pnpm infra:up`.
    and the JSON envelope appears on the `order-events` topic.
 5. Re-POST the same `orderId` -> still one event, one outbox row (idempotent).
 
-Runtime: apps run via `tsx --tsconfig <app>/tsconfig.json` (no build step in Phase 1).
-`--env-file=.env` injects DATABASE_URL; KAFKA_BROKERS defaults to localhost:9092.
-NestJS DI uses explicit `@Inject()` tokens because tsx/esbuild does not emit decorator metadata.
+Runtime: apps run via `@swc-node/register` (emits decorator metadata for idiomatic NestJS DI); `--env-file=.env` injects config.
+`tsconfig-paths/register` resolves `@flashbite/*` path aliases at runtime; KAFKA_BROKERS defaults to localhost:9092.
+NestJS DI uses idiomatic `constructor(private readonly x: X) {}` — no explicit `@Inject()` needed.
 Phase 1b consumes these `order-events` into Mongo read models.
