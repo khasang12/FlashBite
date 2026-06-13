@@ -3,15 +3,21 @@ import { Kafka, logLevel } from "kafkajs";
 const TOPIC = "order-events";
 const BROKERS = (process.env.KAFKA_BROKERS ?? "localhost:9092").split(",");
 
-// Two tenants, several orders each.
-// The partition key is the tenantId so all orders for a tenant land on one partition.
-const MESSAGES = [
+// Production keys messages by `${tenantId}:${orderId}` (the aggregate id), so every
+// event in a single order's lifecycle lands on the same partition IN SEQUENCE.
+// We emit a multi-event lifecycle per order and prove the per-order co-location.
+const ORDERS = [
   { tenant: "berlin", order: "o1" },
   { tenant: "berlin", order: "o2" },
-  { tenant: "berlin", order: "o3" },
   { tenant: "tokyo", order: "o1" },
-  { tenant: "tokyo", order: "o2" },
 ];
+const EVENT_TYPES = ["OrderPlaced", "OrderAccepted", "OrderFulfilled"];
+
+const MESSAGES = ORDERS.flatMap((o) =>
+  EVENT_TYPES.map((event) => ({ ...o, event })),
+);
+
+const orderKey = (m: { tenant: string; order: string }) => `${m.tenant}:${m.order}`;
 
 async function main() {
   const kafka = new Kafka({ clientId: "spike-a", brokers: BROKERS, logLevel: logLevel.NOTHING });
@@ -27,13 +33,14 @@ async function main() {
     watermarks.map((w) => [w.partition, BigInt(w.high)]),
   );
 
-  // Step 2: produce — key is tenantId only so all orders for a tenant hash to the same partition.
+  // Step 2: produce — key is `${tenantId}:${orderId}` so an order's whole event
+  // stream hashes to one partition.
   const producer = kafka.producer();
   await producer.connect();
   await producer.send({
     topic: TOPIC,
     messages: MESSAGES.map((m) => ({
-      key: m.tenant,
+      key: orderKey(m),
       value: JSON.stringify(m),
     })),
   });
@@ -53,7 +60,8 @@ async function main() {
 
   await consumer.subscribe({ topic: TOPIC, fromBeginning: true });
 
-  const partitionByTenant = new Map<string, Set<number>>();
+  // orderKey -> set of partitions it landed on (must be exactly one)
+  const partitionByOrder = new Map<string, Set<number>>();
   let seen = 0;
 
   await new Promise<void>((resolve, reject) => {
@@ -67,10 +75,8 @@ async function main() {
           if (msgOffset < start) return;
 
           const key = message.key?.toString() ?? "";
-          // key is the tenantId directly.
-          const tenant = key;
-          if (!partitionByTenant.has(tenant)) partitionByTenant.set(tenant, new Set());
-          partitionByTenant.get(tenant)!.add(partition);
+          if (!partitionByOrder.has(key)) partitionByOrder.set(key, new Set());
+          partitionByOrder.get(key)!.add(partition);
           seen += 1;
           if (seen >= MESSAGES.length) resolve();
         },
@@ -80,17 +86,17 @@ async function main() {
 
   await consumer.disconnect();
 
-  // Assertion: every tenant's messages landed on exactly ONE partition.
-  for (const [tenant, partitions] of partitionByTenant) {
+  // Assertion: every order's events landed on exactly ONE partition.
+  for (const [key, partitions] of partitionByOrder) {
     if (partitions.size !== 1) {
       throw new Error(
-        `Tenant ${tenant} spread across partitions ${[...partitions].join(",")} — key partitioning broken`,
+        `Order ${key} spread across partitions ${[...partitions].join(",")} — key partitioning broken`,
       );
     }
-    console.log(`tenant=${tenant} -> partition ${[...partitions][0]}`);
+    console.log(`order=${key} -> partition ${[...partitions][0]}`);
   }
 
-  console.log("SPIKE OK: same tenant key => same partition");
+  console.log("SPIKE OK: same tenantId:orderId key => same partition (per-order ordering)");
   process.exit(0);
 }
 
