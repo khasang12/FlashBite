@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashBite: Multi-Tenant Specification Document</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary: #0f172a;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --danger: #dc2626;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text: #334155;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #1e293b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background-color: var(--background);
+            line-height: 1.6;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        nav {
+            width: 300px;
+            background-color: var(--secondary);
+            color: #ffffff;
+            padding: 2rem 1.5rem;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        nav h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #38bdf8;
+        }
+
+        nav p {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 1rem;
+        }
+
+        nav ul {
+            list-style: none;
+        }
+
+        nav li {
+            margin-bottom: 0.75rem;
+        }
+
+        nav a {
+            color: #cbd5e1;
+            text-decoration: none;
+            font-size: 0.95rem;
+            display: block;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            transition: all 0.2s;
+        }
+
+        nav a:hover {
+            background-color: #334155;
+            color: #ffffff;
+        }
+
+        /* Main Content Area */
+        main {
+            margin-left: 300px;
+            flex: 1;
+            padding: 3rem;
+            max-width: 1000px;
+        }
+
+        section {
+            background: var(--surface);
+            padding: 2.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            margin-bottom: 3rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            color: var(--secondary);
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            color: var(--secondary);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border-radius: 0.25rem;
+            text-transform: uppercase;
+        }
+        .badge-business { background-color: #dbeafe; color: #1e40af; }
+        .badge-technical { background-color: #f3e8ff; color: #6b21a8; }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 0.375rem;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+            margin: 1.5rem 0;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background-color: #f1f5f9;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .callout {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary);
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 0.375rem 0.375rem 0;
+        }
+        .callout-title {
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <nav>
+        <h1>FlashBite Platform</h1>
+        <p>B2B Multi-Tenant Specifications</p>
+        <ul>
+            <li><a href="#bus-vision">1. Multi-Tenant Business Vision</a></li>
+            <li><a href="#market-dynamics">2. Multi-Tenant Marketplace Dynamics</a></li>
+            <li><a href="#persona-journeys">3. Tenant-Isolated Journeys</a></li>
+            <li><a href="#sla-sagas">4. Tenant-Configurable SLAs & Sagas</a></li>
+            <li><a href="#event-storming">5. Multi-Tenant Event Catalog</a></li>
+            <li><a href="#tech-topology">6. Unified Technical Topology</a></li>
+            <li><a href="#tenant-isolation">7. Multi-Tenant Isolation Strategies</a></li>
+            <li><a href="#orchestration-code">8. Multi-Tenant Code Implementations</a></li>
+            <li><a href="#infrastructure">9. Global Infrastructure Setup</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section id="bus-vision">
+            <h2>1. Multi-Tenant Business Vision & SaaS Strategy <span class="badge badge-business">Business</span></h2>
+            <p><strong>FlashBite</strong> is an enterprise-grade, hyper-local on-demand delivery platform structured as a multi-tenant <strong>Software-as-a-Service (SaaS)</strong> platform. Instead of operating as a single localized food delivery app, FlashBite enables third-party regional operators, massive restaurant holding groups, or white-label delivery enterprises (each designated as a <strong>Tenant</strong>) to spin up their own isolated hyper-local marketplaces instantly.</p>
+            
+            <h3>1.1. The B2B Multi-Tenant Value Proposition</h3>
+            <p>Every tenant on the FlashBite engine enjoys total data, customer, and catalog isolation while running on shared, highly dynamic global compute clusters. This business architecture addresses critical B2B market needs:</p>
+            <ul>
+                <li><strong>Regional Market Autonomy:</strong> An operator in Berlin and an operator in Tokyo run completely customized corporate configurations, localized currencies, independent fee matrices, and isolated driver fleets.</li>
+                <li><strong>Dynamic Cost & Operational Efficiency:</strong> Infrastructure overhead scales with tenant transactional volume. Small tenants do not pay for heavy dedicated server instances; their isolation is logically guaranteed at the database, streaming, and state machine layer.</li>
+                <li><strong>Data Sovereignty & Legal Compliance:</strong> Tenant data is robustly sandboxed. A customer or order record from Tenant A can never leak or be calculated inside the telemetry dashboards of Tenant B.</li>
+            </ul>
+
+            <div class="callout">
+                <div class="callout-title">Operational Context for Education Purposes</div>
+                <p>To demonstrate production paradigms within this unified monorepo, everything runs locally under multi-tenant structures. The system acts as if it is managing completely independent corporations simultaneously via unique identifiers propagated across all asynchronous communication nodes.</p>
+            </div>
+        </section>
+
+        <section id="market-dynamics">
+            <h2>2. Multi-Tenant Marketplace Dynamics <span class="badge badge-business">Business</span></h2>
+            <p>The marketplace mechanics change dramatically once multi-tenancy is applied. The system handles multiple dimensions of isolation across actors within individual domains:</p>
+            
+            <h3>2.1. Tenant Mapping & Isolation Rules</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Domain Actor</th>
+                        <th>Isolation Operational Rules</th>
+                        <th>Cross-Tenant Interaction</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Platform Tenants</strong></td>
+                        <td>The core enterprise SaaS customer (e.g., "ByteDelivery Corp", "MegaFood Group"). Controls localized configurations.</td>
+                        <td>Strict Zero-Interactivity. Total firewall isolation.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Merchants (Restaurants)</strong></td>
+                        <td>Belong explicitly to one Tenant. Menu schemas, preparation capacities, and legal payouts are bound to that tenant context.</td>
+                        <td>Cannot access orders or drivers of other tenants.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Customers (Users)</strong></td>
+                        <td>Accounts are tenant-scoped. Authenticating to Tenant A does not permit access or view rights to Tenant B's storefront application.</td>
+                        <td>Logical profile scoping via custom subdomains.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Logistics Partners (Drivers)</strong></td>
+                        <td>Drivers are assigned to a tenant’s logistics pool. Can be globally aggregated *only if* explicit B2B mutual agreements are provisioned.</td>
+                        <td>Telemetry streams are bound strictly to active tenant orders.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>2.2. NextJS Multi-Tenant Subdomain Routing Strategy</h3>
+            <p>The user experience is separated at the presentation tier using dynamic subdomains handled inside NextJS routing protocols:</p>
+            <ul>
+                <li><code>berlin-eats.flashbite.com/...</code> routes to Tenant A's customer experience.</li>
+                <li><code>tokyo-sushi.flashbite.com/...</code> routes to Tenant B's customer experience.</li>
+                <li><code>admin.flashbite.com</code> manages the global telemetry control grid for platform configuration.</li>
+            </ul>
+        </section>
+
+        <section id="persona-journeys">
+            <h2>3. Tenant-Isolated Core Persona Journeys <span class="badge badge-business">Business</span></h2>
+            <p>The core lifecycle of operations relies completely on passing the immutable identity tenant context across every edge interaction.</p>
+
+            <h3>3.1. The Customer Checkout Journey</h3>
+            <ol>
+                <li><strong>Tenant Handshake:</strong> The customer accesses the platform via a tenant-specific URL (e.g., <code>https://alpha-meals.flashbite.com</code>). The NextJS server identifies the tenant context and polls the localized configuration.</li>
+                <li><strong>Menu Interaction:</strong> The customer views item catalogs which are dynamically hydrated via cached read-models specific to that tenant ID.</li>
+                <li><strong>Command Dispatch:</strong> When clicking "Place Order", the frontend dispatches a command payload containing an implicit HTTP header: <code>X-Tenant-ID: alpha-meals-uuid</code>.</li>
+            </ol>
+
+            <h3>3.2. The Restaurant Fulfillment Journey</h3>
+            <ol>
+                <li><strong>Isolated Listening:</strong> The Merchant Dashboard application connects to the NestJS Event-API via Server-Sent Events (SSE). The connection query parameter contains the verified <code>tenantId</code>.</li>
+                <li><strong>SLA Monitoring:</strong> Incoming order alerts populate. The system tracks individual tenant-defined SLA limits (e.g., Tenant Alpha mandates restaurant responses within 4 minutes, while Tenant Beta allows up to 7 minutes).</li>
+            </ol>
+
+            <h3>3.3. The Driver Delivery Stream</h3>
+            <ol>
+                <li><strong>Contextual Dispatch:</strong> Drivers receive order dispatch proposals isolated to the tenant fleet they are logged into.</li>
+                <li><strong>High-Velocity Telemetry Isolation:</strong> The driver app streams GPS location coordinates to the server every 3 seconds. Every message is accompanied by the active <code>tenantId</code> payload key, allowing Kafka consumer groups to partition real-time metrics safely.</li>
+            </ol>
+        </section>
+
+        <section id="sla-sagas">
+            <h2>4. Tenant-Configurable SLAs & Compensating Sagas <span class="badge badge-business">Business</span></h2>
+            <p>One of the strongest business motivations for merging Temporal workflows with Kafka consumer architectures in a multi-tenant system is the flexibility it provides for long-running business rules.</p>
+
+            <h3>4.1. Dynamic SLA Configurations</h3>
+            <p>Different enterprise tenants require different operational safety guardrails. Rather than hard-coding timeouts, the execution orchestration engine looks up the tenant's profile configuration dynamically during step transitions:</p>
+
+            <pre><code>Tenant "FastBite":
+  - Restaurant Acceptance Timeout: 3 Minutes
+  - Courier Allocation Window: 5 Minutes
+  - Compensation: Direct financial reverse-refund to original credit card card.
+
+Tenant "GourmetDeluxe":
+  - Restaurant Acceptance Timeout: 10 Minutes
+  - Courier Allocation Window: 15 Minutes
+  - Compensation: Reverse-refund + automatic credit of 500 Loyalty points to customer account.</code></pre>
+
+            <h3>4.2. Business Mitigation Matrix via Distributed Sagas</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Failure State</th>
+                        <th>Workflow Path Taken</th>
+                        <th>Compensating Action (Business Rule)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Restaurant declines order</td>
+                        <td>Temporal catches event signal</td>
+                        <td>Cancel payment authorization immediately; send tenant-branded alert email.</td>
+                    </tr>
+                    <tr>
+                        <td>Restaurant SLA times out</td>
+                        <td>Temporal workflow timer expires</td>
+                        <td>Execute automated compensation; log restaurant penalty infraction in tenant metrics ledger.</td>
+                    </tr>
+                    <tr>
+                        <td>No couriers matched</td>
+                        <td>Logistics loop exhausting retry count</td>
+                        <td>Refund payment; dispatch tenant customer service voucher code via Redis key trigger.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="event-storming">
+            <h2>5. Multi-Tenant Event Storming Catalog <span class="badge badge-business">Business</span></h2>
+            <p>Every domain event generated within the platform must act as an unalterable chronicle containing the tenant origin. Below is the business catalog of messages transmitted across Kafka pipelines.</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Event Structural Identity</th>
+                        <th>Producer Domain</th>
+                        <th>Consumer Domain/Impact Matrix</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>TenantProvisioned</code></td>
+                        <td>SaaS Management Core</td>
+                        <td>Creates partitioned read DB views, creates cache schemas, mounts Temporal namespace workflows.</td>
+                    </tr>
+                    <tr>
+                        <td><code>OrderPlaced</code></td>
+                        <td>Order Write-API</td>
+                        <td>Locks customer balance; activates specific tenant workflow lifecycle instance.</td>
+                    </tr>
+                    <tr>
+                        <td><code>PaymentSettled</code></td>
+                        <td>Financial Gateway Core</td>
+                        <td>Updates projection write ledger; increments total GMV (Gross Merchandise Value) inside tenant financial metrics dashboard.</td>
+                    </tr>
+                    <tr>
+                        <td><code>OrderAcceptedByMerchant</code></td>
+                        <td>Merchant Operations App</td>
+                        <td>Stops restaurant countdown timers; signals regional driver consumer groups to begin fleet matching.</td>
+                    </tr>
+                    <tr>
+                        <td><code>DriverTelemetryStreamed</code></td>
+                        <td>Driver Telemetry App</td>
+                        <td>Piped into high-frequency tracking dashboard. Ephemeral event cached via Redis geospatial indices.</td>
+                    </tr>
+                    <tr>
+                        <td><code>OrderFulfillmentFinalized</code></td>
+                        <td>Driver Logistics Hub</td>
+                        <td>Completes workflow execution state; structures financial payout distribution vectors for tenant accounting ledger.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="tech-topology">
+            <h2>6. Unified Technical Topology & Architectural Flows <span class="badge badge-technical">Technical</span></h2>
+            <p>The architectural strategy leverages <strong>NestJS</strong> as a microservices controller, <strong>NextJS</strong> for user interfaces, <strong>Kafka</strong> as the reliable cross-service transactional event freeway, and <strong>Temporal</strong> for business orchestration state persistence.</p>
+
+            <h3>6.1. The Global Structural Architecture Flow</h3>
+            <p>The system operates using an isolated dual-path mechanism (CQRS + Event Sourcing + Outbox):</p>
+            <ol>
+                <li><strong>Command Pipeline:</strong> NextJS ➔ NestJS Write-API ➔ PostgreSQL Transaction (Event Ledger + Outbox Record inside a single atomicity boundary) ➔ Outbox Poller Worker ➔ Kafka (Avro Encoded Binary Stream with Tenant Header propagation).</li>
+                <li><strong>Query Pipeline:</strong> Kafka Stream ➔ NestJS Projection Worker ➔ MongoDB Tenant Isolated Document Collections ➔ Redis Cache Layer (Namespaced by Tenant ID) ➔ NestJS Read-API ➔ NextJS UI Fetch Component.</li>
+                <li><strong>Process Orchestration Path:</strong> Kafka Consumer Worker ➔ Temporal Workflow (Tracks state timelines, timers, and SLA conditions for specific <code>tenantId</code> configurations).</li>
+            </ol>
+        </section>
+
+        <section id="tenant-isolation">
+            <h2>7. Technical Multi-Tenant Isolation Strategies <span class="badge badge-technical">Technical</span></h2>
+            <p>To ensure high performance and physical data sandbox compliance within a single project context, we apply explicit boundaries at each technical tier:</p>
+
+            <h3>7.1. Database Isolation: Row-Level Security (RLS) in PostgreSQL</h3>
+            <p>We leverage a shared-database, isolated-row paradigm using native Postgres policies. Every table contains a <code>tenant_id</code> column indexed robustly alongside primary identifiers. All application queries apply tenant variables implicitly via NestJS transaction middleware wrappers.</p>
+
+            <h3>7.2. Kafka Isolation: Partitioning & Consumer Groups</h3>
+            <p>We route multi-tenant messages over global shared topics (e.g., <code>order-events</code>), but enforce isolation through the <strong>Partition Key</strong> strategy. When streaming messages, the Kafka producer sets the Message Key to <code>tenantId:orderId</code>. Kafka uses this key to calculate hashes, ensuring that all messages belonging to a given tenant's order always land on the exact same partition in chronological sequence.</p>
+
+            <h3>7.3. Temporal Isolation: Multi-Tenant State Scoping</h3>
+            <p>Temporal workflows run deterministically. Multi-tenancy is achieved by injecting the <code>tenantId</code> as a mandatory root workflow execution input argument and setting the <code>WorkflowId</code> structure pattern to <code>tenant_id:order_id</code>. This prevents cross-tenant workflow collision and guarantees trace execution isolation.</p>
+
+            <h3>7.4. Redis Caching Namespacing</h3>
+            <p>To avoid key collision and data contamination, all keys stored inside the shared Redis instance match an immutable structural pattern: <code>tenant:{tenantId}:{domain}:{resourceId}</code>.</p>
+        </section>
+
+        <section id="orchestration-code">
+            <h2>8. Multi-Tenant Architectural Code Implementations <span class="badge badge-technical">Technical</span></h2>
+            <p>Below are real production-grade TypeScript structures demonstrating how tenant contexts propagate across our multi-service setup.</p>
+
+            <h3>8.1. NestJS Dynamic Tenant Context Middleware</h3>
+            <p>This interceptor extracts the tenant context from the incoming HTTP request headers or subdomain routing structures and injects it into an asynchronous execution context container (AsyncLocalStorage).</p>
+
+            <pre><code class="language-typescript">// apps/write-api/src/common/tenant-context.middleware.ts
+import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+import { AsyncLocalStorage } from 'async-hooks';
+
+export const tenantStorage = new AsyncLocalStorage&lt;string&gt;();
+
+@Injectable()
+export class TenantContextMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    const tenantId = req.headers['x-tenant-id'] as string;
+    
+    if (!tenantId) {
+      throw new UnauthorizedException('Multi-tenant execution bounds require an active Tenant Identifier header.');
+    }
+
+    // Wrap execution context inside AsyncLocalStorage
+    tenantStorage.run(tenantId, () => {
+      req['tenantId'] = tenantId;
+      next();
+    });
+  }
+}</code></pre>
+
+            <h3>8.2. Multi-Tenant Event Store & Transactional Outbox Handler</h3>
+            <p>This command handler ensures that the Event Sourcing ledger and the Transactional Outbox entry are written within an atomic, tenant-bound PostgreSQL database execution context.</p>
+
+            <pre><code class="language-typescript">// apps/write-api/src/orders/commands/handlers/create-order.handler.ts
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { tenantStorage } from '../../../common/tenant-context.middleware';
+
+@CommandHandler(CreateOrderCommand)
+export class CreateOrderHandler implements ICommandHandler&lt;CreateOrderCommand&gt; {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async execute(command: CreateOrderCommand) {
+    const tenantId = tenantStorage.getStore();
+    const { orderId, customerId, totalAmount, items } = command;
+
+    const orderPayload = { orderId, customerId, totalAmount, items };
+
+    // Atomicity block execution
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Write to append-only Event Store ledger
+      await tx.eventStore.create({
+        data: {
+          tenantId: tenantId,
+          aggregateType: 'ORDER',
+          aggregateId: orderId,
+          eventType: 'OrderPlacedEvent',
+          payload: orderPayload
+        }
+      });
+
+      // 2. Append to Transactional Outbox for Kafka relay execution
+      await tx.outboxLedger.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenantId: tenantId,
+          topic: 'order-events',
+          eventType: 'OrderPlaced',
+          // Message key pattern preserves partition ordering per tenant constraints
+          partitionKey: `${tenantId}:${orderId}`,
+          payload: JSON.stringify({ ...orderPayload, tenantId }),
+          status: 'PENDING'
+        }
+      });
+    });
+  }
+}</code></pre>
+
+            <h3>8.3. Multi-Tenant Temporal Workflow Execution Engine</h3>
+            <p>This workflow maps out how Temporal dynamically coordinates tenant-specific configurations while processing order milestones.</p>
+
+            <pre><code class="language-typescript">// packages/temporal-backend/src/workflows/multi-tenant-order.workflow.ts
+import { proxyActivities, sleep, defineSignal, setHandler } from '@temporalio/workflow';
+import type * as activities from '../activities/order.activities';
+
+const { chargePaymentActivity, fetchTenantConfigActivity, refundPaymentActivity } =
+  proxyActivities&lt;typeof activities&gt;({ startToCloseTimeout: '2 minutes' });
+
+export const merchantApprovalSignal = defineSignal&lt;[boolean]&gt;('merchantApproval');
+
+export async function tenantOrderLifecycleWorkflow(tenantId: string, orderId: string, orderDetails: any): Promise<string> {
+  let isApprovedByMerchant = false;
+  let responseReceived = false;
+
+  setHandler(merchantApprovalSignal, (approved: boolean) => {
+    isApprovedByMerchant = approved;
+    responseReceived = true;
+  });
+
+  // 1. Look up localized tenant business SLAs dynamically from metadata storage
+  const tenantConfig = await fetchTenantConfigActivity(tenantId);
+  const slaDurationString = `${tenantConfig.restaurantAcceptanceTimeoutMinutes} minutes`;
+
+  // 2. Execute Payment Activity
+  await chargePaymentActivity(tenantId, orderId, orderDetails.totalAmount);
+
+  // 3. Coordinate Tenant SLA countdown window natively inside Temporal state machine
+  const completedInTime = await Promise.race([
+    sleep(slaDurationString).then(() => false),
+    new Promise&lt;boolean&gt;((resolve) => {
+      setHandler(merchantApprovalSignal, (approved) => resolve(approved));
+    })
+  ]);
+
+  if (!completedInTime || !isApprovedByMerchant) {
+    // Invoke Compensation pattern in case of SLA breach
+    await refundPaymentActivity(tenantId, orderId, orderDetails.totalAmount);
+    return `ORDER_CANCELLED_VIA_SLA_BREACH_FOR_TENANT_${tenantId}`;
+  }
+
+  return 'ORDER_PROCESSED_SUCCESSFULLY';
+}</code></pre>
+
+            <h3>8.4. Namespacing Redis Cache within the NestJS Read-API</h3>
+            <p>This service shows how the Read-API abstracts data queries by prefixing keys with the tenant identifier to ensure isolation.</p>
+
+            <pre><code class="language-typescript">// apps/read-api/src/orders/orders-query.service.ts
+import { Injectable, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { tenantStorage } from '../common/tenant-context.middleware';
+
+@Injectable()
+export class OrdersQueryService {
+  constructor(@Inject(CACHE_MANAGER) private redisCache: Cache) {}
+
+  async getCachedDashboardView(orderId: string): Promise&lt;any&gt; {
+    const tenantId = tenantStorage.getStore();
+    // Strict isolation caching structural mask pattern
+    const cacheKey = `tenant:${tenantId}:order:${orderId}:dashboard`;
+
+    const cachedData = await this.redisCache.get(cacheKey);
+    if (cachedData) {
+      return JSON.parse(cachedData as string);
+    }
+
+    // Fallback: Query MongoDB Tenant Isolated Read Collection if cache miss happens
+    const freshView = await this.fetchFromMongoModel(tenantId, orderId);
+    
+    await this.redisCache.set(cacheKey, JSON.stringify(freshView), 10000); // 10s TTL
+    return freshView;
+  }
+
+  private async fetchFromMongoModel(tenantId: string, orderId: string) {
+    // Logic filtering query by { tenantId, orderId } goes here
+    return { orderId, tenantId, status: 'COOKING_IN_PROGRESS' };
+  }
+}</code></pre>
+        </section>
+
+        <section id="infrastructure">
+            <h2>9. Local Infrastructure Matrix Deployment <span class="badge badge-technical">Technical</span></h2>
+            <p>To run the entire multi-tenant configuration on your machine, save this complete <code>docker-compose.yml</code> file in the root directory of your project folder. It boots Kafka with Kraft engine configurations, multi-partition topic creation loops, Schema Registry, isolated databases, Redis, and Temporal Servers.</p>
+
+            <pre><code class="language-yaml">version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flashbite_write_cluster
+      POSTGRES_PASSWORD: framework_master_secret
+      POSTGRES_USER: root
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_tenant_data:/var/lib/postgresql/data
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_tenant_data:/data/db
+
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  kafka-provision-topics:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - kafka
+    entrypoint: [ "bin/sh", "-c" ]
+    command: |
+      "
+      # Block until broker is available
+      sleep 10;
+      echo 'Provisioning multi-partition shared-tenant topics...'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-events --partitions 6 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic telemetry-streams --partitions 12 --replication-factor 1
+      echo 'Topic infrastructure generation verified.'
+      "
+
+  temporal:
+    image: temporalio/auto-setup:1.22.0
+    ports:
+      - "7233:7233"
+      - "8080:8080"
+    environment:
+      - DB=postgresql
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_PWD=framework_master_secret
+      - POSTGRES_USER=root
+    depends_on:
+      - postgres
+
+volumes:
+  pg_tenant_data:
+  mongo_tenant_data:</code></pre>
+        </section>
+    </main>
+</div>
+
+</body>
+</html>
