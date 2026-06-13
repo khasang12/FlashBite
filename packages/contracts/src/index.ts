@@ -47,3 +47,23 @@ export function buildEnvelope<T>(args: {
     payload: args.payload,
   };
 }
+
+export interface OrderView {
+  tenantId: string;
+  orderId: string;
+  customerId: string;
+  items: OrderItem[];
+  totalAmount: number;
+  status: string;
+  version: number;
+  updatedAt: string;
+}
+
+export const ORDER_STATUS = {
+  PLACED: "PLACED",
+} as const;
+
+export const READ_COLLECTIONS = {
+  ORDERS: "orders",
+  PROCESSED: "processed_events",
+} as const;
