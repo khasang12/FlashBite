@@ -324,150 +324,22 @@ services:
     ports:
       - "8080:8080"
 
-  # ---------- Redis Cluster: 6 nodes (3 masters + 3 replicas) ----------
-  # Each node advertises 127.0.0.1 so host-run cluster clients aren't redirected
-  # to unreachable internal Docker IPs.
-  redis-0: &redis-node
-    image: redis:7.2-alpine
-    command:
-      - redis-server
-      - --port
-      - "7000"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7000"
-      - --cluster-announce-bus-port
-      - "17000"
+  # ---------- Redis Cluster: single-container 6-node cluster ----------
+  # macOS Docker Desktop cannot expose discrete-container Redis Cluster nodes to the
+  # host (network_mode host binds inside the Linux VM only; bridge mode breaks gossip).
+  # grokzen runs 6 real redis processes forming one cluster in a single network
+  # namespace, with all node ports published so a Mac host client can follow MOVED
+  # redirects. Ports start at 7100 to avoid macOS AirPlay on 7000.
+  redis-cluster:
+    image: grokzen/redis-cluster:7.0.15
+    environment:
+      IP: 0.0.0.0
+      INITIAL_PORT: 7100
+      MASTERS: 3
+      SLAVES_PER_MASTER: 1
     ports:
-      - "7000:7000"
-      - "17000:17000"
-    network_mode: "host"
-  redis-1:
-    <<: *redis-node
-    command:
-      - redis-server
-      - --port
-      - "7001"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7001"
-      - --cluster-announce-bus-port
-      - "17001"
-    ports:
-      - "7001:7001"
-      - "17001:17001"
-    network_mode: "host"
-  redis-2:
-    <<: *redis-node
-    command:
-      - redis-server
-      - --port
-      - "7002"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7002"
-      - --cluster-announce-bus-port
-      - "17002"
-    ports:
-      - "7002:7002"
-      - "17002:17002"
-    network_mode: "host"
-  redis-3:
-    <<: *redis-node
-    command:
-      - redis-server
-      - --port
-      - "7003"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7003"
-      - --cluster-announce-bus-port
-      - "17003"
-    ports:
-      - "7003:7003"
-      - "17003:17003"
-    network_mode: "host"
-  redis-4:
-    <<: *redis-node
-    command:
-      - redis-server
-      - --port
-      - "7004"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7004"
-      - --cluster-announce-bus-port
-      - "17004"
-    ports:
-      - "7004:7004"
-      - "17004:17004"
-    network_mode: "host"
-  redis-5:
-    <<: *redis-node
-    command:
-      - redis-server
-      - --port
-      - "7005"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-node-timeout
-      - "5000"
-      - --cluster-announce-ip
-      - "127.0.0.1"
-      - --cluster-announce-port
-      - "7005"
-      - --cluster-announce-bus-port
-      - "17005"
-    ports:
-      - "7005:7005"
-      - "17005:17005"
-    network_mode: "host"
-
-  # ---------- One-shot: form the cluster ----------
-  redis-cluster-init:
-    image: redis:7.2-alpine
-    network_mode: "host"
-    depends_on:
-      - redis-0
-      - redis-1
-      - redis-2
-      - redis-3
-      - redis-4
-      - redis-5
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        sleep 5;
-        redis-cli --cluster create \
-          127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 \
-          127.0.0.1:7003 127.0.0.1:7004 127.0.0.1:7005 \
-          --cluster-replicas 1 --cluster-yes
-    restart: "no"
+      - "7100-7105:7100-7105"
+      - "17100-17105:17100-17105"
 
 volumes:
   pg_app_data:
@@ -476,7 +348,7 @@ volumes:
   temporal_pg_data:
 ```
 
-> **Note on `network_mode: host`:** Redis Cluster gossip + client redirection is far simpler on host networking (macOS/Linux). The other services stay on the default Compose bridge network and talk by service name. This split is intentional and documented in `infra/README.md` (Task 8).
+> **Deviation note (macOS):** The original plan used 6 discrete containers with `network_mode: host`. macOS Docker Desktop cannot expose discrete-container Redis Cluster nodes to the host (host networking binds inside the Linux VM only; bridge mode breaks cluster gossip). Replaced with `grokzen/redis-cluster:7.0.15` — a single container running 6 real Redis processes in one network namespace, with all ports published. Ports start at 7100 (not 7000) to avoid macOS AirPlay. All other services remain on the default Compose bridge network.
 
 - [ ] **Step 2: Validate the compose file parses**
 
@@ -514,7 +386,7 @@ Run:
 ```bash
 docker compose -f infra/docker-compose.yml ps
 ```
-Expected: `postgres`, `mongodb`, `redpanda`, `temporal`, `temporal-postgres` show `healthy`; `redis-0..5` and the two UIs show `running`/`up`.
+Expected: `postgres`, `mongodb`, `redpanda`, `temporal`, `temporal-postgres` show `healthy`; `redis-cluster` and the two UIs show `running`/`up`. The old `redis-0..5` and `redis-cluster-init` services are gone (removed by `--remove-orphans`).
 
 - [ ] **Step 3: Confirm topics were created**
 
@@ -525,14 +397,23 @@ docker exec flashbite-redpanda-1 rpk topic list --brokers redpanda:29092
 Expected: lists `order-events` (6 partitions) and `telemetry-streams` (12 partitions).
 > If the container name differs, find it with `docker compose -f infra/docker-compose.yml ps`.
 
-- [ ] **Step 4: Confirm Redis Cluster formed**
+- [ ] **Step 4: Confirm Redis Cluster formed (single-container grokzen topology)**
 
-Run:
+Wait ~20-25s after the container starts for the 6-node cluster to self-form, then run:
 ```bash
-redis-cli -p 7000 cluster info | grep cluster_state
+redis-cli -c -h 127.0.0.1 -p 7100 cluster info | grep cluster_state
 ```
 Expected: `cluster_state:ok`.
-> If `redis-cli` is not installed on the host, use: `docker exec flashbite-redis-0-1 redis-cli -p 7000 cluster info | grep cluster_state`.
+
+Verify host can follow MOVED redirects across slots:
+```bash
+redis-cli -c -h 127.0.0.1 -p 7100 set "{tenant:berlin}:probe" v1
+redis-cli -c -h 127.0.0.1 -p 7100 get "{tenant:berlin}:probe"   # expect v1
+redis-cli -c -h 127.0.0.1 -p 7100 set "{tenant:tokyo}:probe" v2
+redis-cli -c -h 127.0.0.1 -p 7100 get "{tenant:tokyo}:probe"    # expect v2
+redis-cli -c -h 127.0.0.1 -p 7100 cluster nodes | wc -l         # expect 6
+```
+> Use `/opt/homebrew/bin/redis-cli` on macOS (Homebrew). The `-c` flag enables cluster-follow-redirect mode.
 
 - [ ] **Step 5: Eyeball the UIs (optional manual check)**
 
@@ -990,8 +871,13 @@ Create `spikes/src/redis-cluster.spike.ts`:
 ```ts
 import { Cluster } from "ioredis";
 
+// NOTE (macOS deviation): grokzen/redis-cluster runs all 6 nodes in one container,
+// ports 7100-7105. If ioredis receives a MOVED redirect to 0.0.0.0 (grokzen's
+// announced IP), add a natMap option to the Cluster constructor:
+//   new Cluster(NODES, { natMap: { "0.0.0.0:7100": { host: "127.0.0.1", port: 7100 }, ... } })
+// Test without natMap first — if cluster info works but SET/GET hangs on redirect, add it.
 const NODES = (process.env.REDIS_CLUSTER_NODES ??
-  "127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005")
+  "127.0.0.1:7100,127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103,127.0.0.1:7104,127.0.0.1:7105")
   .split(",")
   .map((hp) => {
     const [host, port] = hp.split(":");
@@ -1132,7 +1018,7 @@ Confirm every item below passes. This is the gate to Phase 1.
 ```
 [ ] pnpm infra:up brings all services up; init one-shots exit 0
 [ ] docker compose ps shows postgres/mongodb/redpanda/temporal healthy
-[ ] redis-cli -p 7000 cluster info => cluster_state:ok
+[ ] redis-cli -c -h 127.0.0.1 -p 7100 cluster info => cluster_state:ok  (single-container grokzen, ports 7100-7105)
 [ ] rpk topic list shows order-events (6) and telemetry-streams (12)
 [ ] Spike A (kafka)    => SPIKE OK
 [ ] Spike B (temporal) => SPIKE OK
@@ -1165,7 +1051,7 @@ git commit -m "docs(infra): phase 0 runbook and exit checklist"
 
 **Placeholder scan:** No TBD/TODO; every code and command step contains complete content.
 
-**Type/name consistency:** `approveSignal`/`slaRaceWorkflow` defined in `workflow.ts` and imported identically in `worker.ts`/`run.spike.ts`; topic names (`order-events`, `telemetry-streams`), partition counts (6/12), Redis ports (7000-7005), and the `{tenant:id}` hash-tag pattern are consistent across all tasks and match the master spec.
+**Type/name consistency:** `approveSignal`/`slaRaceWorkflow` defined in `workflow.ts` and imported identically in `worker.ts`/`run.spike.ts`; topic names (`order-events`, `telemetry-streams`), partition counts (6/12), Redis ports (7100-7105, single-container grokzen deviation), and the `{tenant:id}` hash-tag pattern are consistent across all tasks and match the master spec.
 
 **Scope note:** The `outbox_ledger` table in Spike C is intentionally minimal and self-cleaning (`DROP TABLE` at the end) — Phase 1 will formalize the event store + outbox via real migrations. The spikes are throwaway by design (§6 Phase 0) and are removed when Phase 1 begins.
 ```
