@@ -9,6 +9,7 @@ import {
   ORDER_SAGA,
   ORDER_SAGA_RESULTS,
   TOPICS,
+  driverGeoKey,
 } from "@flashbite/contracts";
 
 describe("contracts constants", () => {
@@ -18,6 +19,7 @@ describe("contracts constants", () => {
       ORDER_PLACED: "OrderPlaced",
       ORDER_ACCEPTED: "OrderAccepted",
       ORDER_CANCELLED: "OrderCancelled",
+      DRIVER_TELEMETRY_STREAMED: "DriverTelemetryStreamed",
     });
     expect(ORDER_STATUS).toEqual({ PLACED: "PLACED", ACCEPTED: "ACCEPTED", CANCELLED: "CANCELLED" });
   });
@@ -29,6 +31,7 @@ describe("contracts constants", () => {
       PROJECTION: "projection-worker",
       SAGA: "saga-worker",
       READ_API_SSE: "read-api-sse",
+      TELEMETRY: "telemetry-worker",
     });
     expect(CONSUMERS.PROJECTION).toBe("projection-worker");
     expect(READ_COLLECTIONS).toEqual({ ORDERS: "orders", PROCESSED: "processed_events" });
@@ -46,5 +49,11 @@ describe("contracts constants", () => {
       CANCELLED_DECLINED: "CANCELLED_DECLINED",
     });
     expect(ORDER_CANCEL_REASONS).toEqual({ SLA_BREACH: "SLA_BREACH", DECLINED: "DECLINED" });
+  });
+
+  it("exposes telemetry constants + geo key helper", () => {
+    expect(EVENT_TYPES.DRIVER_TELEMETRY_STREAMED).toBe("DriverTelemetryStreamed");
+    expect(CONSUMER_GROUPS.TELEMETRY).toBe("telemetry-worker");
+    expect(driverGeoKey("berlin")).toBe("{tenant:berlin}:drivers:geo");
   });
 });
