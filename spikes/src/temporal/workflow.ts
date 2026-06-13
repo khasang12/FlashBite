@@ -1,4 +1,4 @@
-import { condition, defineSignal, setHandler, sleep } from "@temporalio/workflow";
+import { condition, defineSignal, setHandler } from "@temporalio/workflow";
 
 export const approveSignal = defineSignal<[boolean]>("approve");
 

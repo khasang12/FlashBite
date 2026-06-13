@@ -50,3 +50,19 @@ pnpm --filter @flashbite/spikes redis            # cluster + hash tags
 ```
 
 These are deleted at the start of Phase 1.
+
+## Phase 0 exit checklist
+
+The gate to Phase 1. All items must pass:
+
+```
+[ ] pnpm infra:up brings all services up; init one-shots exit 0
+[ ] docker compose ps shows postgres/mongodb/redpanda/temporal healthy
+[ ] redis-cli -c -h 127.0.0.1 -p 7100 cluster info => cluster_state:ok
+[ ] rpk topic list shows order-events (6) and telemetry-streams (12)
+[ ] Spike A (kafka)    => SPIKE OK
+[ ] Spike B (temporal) => SPIKE OK
+[ ] Spike C (outbox)   => SPIKE OK
+[ ] Spike D (redis)    => SPIKE OK
+[ ] http://localhost:8080 (Temporal UI) and http://localhost:8085 (Console) load
+```
