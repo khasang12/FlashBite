@@ -22,10 +22,11 @@ export async function applyEvent(db: Db, envelope: EventEnvelope): Promise<"appl
     return "skipped";
   }
 
+  const orders = db.collection(READ_COLLECTIONS.ORDERS);
+  const _id = `${envelope.tenantId}:${(envelope.payload as { orderId: string }).orderId}`;
+
   if (envelope.eventType === EVENT_TYPES.ORDER_PLACED) {
     const p = envelope.payload as OrderPlacedPayload;
-    const _id = `${envelope.tenantId}:${p.orderId}`;
-    const orders = db.collection(READ_COLLECTIONS.ORDERS);
     const existing = await orders.findOne({ _id: _id as never });
     if (!existing || (existing.version as number) < envelope.version) {
       await orders.updateOne(
@@ -43,6 +44,19 @@ export async function applyEvent(db: Db, envelope: EventEnvelope): Promise<"appl
           },
         },
         { upsert: true },
+      );
+    }
+  } else if (
+    envelope.eventType === EVENT_TYPES.ORDER_ACCEPTED ||
+    envelope.eventType === EVENT_TYPES.ORDER_CANCELLED
+  ) {
+    const status =
+      envelope.eventType === EVENT_TYPES.ORDER_ACCEPTED ? ORDER_STATUS.ACCEPTED : ORDER_STATUS.CANCELLED;
+    const existing = await orders.findOne({ _id: _id as never });
+    if (existing && (existing.version as number) < envelope.version) {
+      await orders.updateOne(
+        { _id: _id as never },
+        { $set: { status, version: envelope.version, updatedAt: envelope.occurredAt } },
       );
     }
   }
