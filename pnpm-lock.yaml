@@ -159,12 +159,18 @@ importers:
 
   packages/shared:
     dependencies:
+      '@flashbite/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@nestjs/common':
         specifier: 10.4.4
         version: 10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@prisma/client':
         specifier: 5.18.0
         version: 5.18.0(prisma@5.18.0)
+      '@temporalio/client':
+        specifier: 1.11.1
+        version: 1.11.1
       ioredis:
         specifier: 5.4.1
         version: 5.4.1
