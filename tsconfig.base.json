@@ -9,6 +9,12 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": false,
-    "sourceMap": true
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@flashbite/contracts": ["packages/contracts/src/index.ts"],
+      "@flashbite/shared": ["packages/shared/src/index.ts"],
+      "@flashbite/tenant-context": ["packages/tenant-context/src/index.ts"]
+    }
   }
 }
