@@ -24,6 +24,8 @@ export interface OrderPlacedPayload {
 
 export const EVENT_TYPES = {
   ORDER_PLACED: "OrderPlaced",
+  ORDER_ACCEPTED: "OrderAccepted",
+  ORDER_CANCELLED: "OrderCancelled",
 } as const;
 
 export const TOPICS = {
@@ -61,7 +63,18 @@ export interface OrderView {
 
 export const ORDER_STATUS = {
   PLACED: "PLACED",
+  ACCEPTED: "ACCEPTED",
+  CANCELLED: "CANCELLED",
 } as const;
+
+export interface OrderAcceptedPayload {
+  orderId: string;
+}
+
+export interface OrderCancelledPayload {
+  orderId: string;
+  reason: string;
+}
 
 export const READ_COLLECTIONS = {
   ORDERS: "orders",

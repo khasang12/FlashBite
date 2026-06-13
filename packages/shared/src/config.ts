@@ -9,6 +9,8 @@ export interface AppConfig {
   defaultTenantId: string;
   mongoUri: string;
   redisClusterNodes: RedisNode[];
+  temporalAddress: string;
+  sagaSlaSeconds: number;
 }
 
 export const DEFAULT_TENANT_ID = "berlin";
@@ -32,5 +34,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     defaultTenantId: env.DEFAULT_TENANT_ID ?? DEFAULT_TENANT_ID,
     mongoUri: env.MONGO_URI ?? "mongodb://localhost:27017/flashbite_read",
     redisClusterNodes,
+    temporalAddress: env.TEMPORAL_ADDRESS ?? "localhost:7233",
+    sagaSlaSeconds: Number(env.SAGA_SLA_SECONDS ?? 300),
   };
 }
