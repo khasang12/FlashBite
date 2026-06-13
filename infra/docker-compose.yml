@@ -1,0 +1,283 @@
+name: flashbite
+
+services:
+  # ---------- Application Postgres: event store + outbox ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flashbite
+      POSTGRES_PASSWORD: local_dev_only_change_me
+      POSTGRES_DB: flashbite_write
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_app_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashbite -d flashbite_write"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- MongoDB: read models ----------
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Redpanda: Kafka API + built-in Schema Registry ----------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:29092,external://0.0.0.0:9092
+      # external advertised on localhost so host-run spikes connect cleanly
+      - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=info
+    ports:
+      - "9092:9092"     # Kafka API (host)
+      - "18081:18081"   # Schema Registry (host)
+      - "9644:9644"     # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ---------- One-shot: create the shared multi-tenant topics ----------
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create order-events --partitions 6 --brokers redpanda:29092 || true
+        rpk topic create telemetry-streams --partitions 12 --brokers redpanda:29092 || true
+        rpk topic list --brokers redpanda:29092
+    restart: "no"
+
+  # ---------- Redpanda Console (observability UI) ----------
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    ports:
+      - "8085:8080"     # Console UI on host 8085 (8080 reserved for Temporal UI)
+
+  # ---------- Temporal's OWN Postgres (kept separate from app Postgres) ----------
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Temporal server (auto-setup) ----------
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      # Temporal >= 1.20 uses the postgres12 schema plugin, NOT 'postgresql'
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_SEEDS=temporal-postgres
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  # ---------- Temporal Web UI ----------
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8080:8080"
+
+  # ---------- Redis Cluster: 6 nodes (3 masters + 3 replicas) ----------
+  # Each node advertises 127.0.0.1 so host-run cluster clients aren't redirected
+  # to unreachable internal Docker IPs.
+  redis-0: &redis-node
+    image: redis:7.2-alpine
+    command:
+      - redis-server
+      - --port
+      - "7000"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7000"
+      - --cluster-announce-bus-port
+      - "17000"
+    ports:
+      - "7000:7000"
+      - "17000:17000"
+    network_mode: "host"
+  redis-1:
+    <<: *redis-node
+    command:
+      - redis-server
+      - --port
+      - "7001"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7001"
+      - --cluster-announce-bus-port
+      - "17001"
+    ports:
+      - "7001:7001"
+      - "17001:17001"
+    network_mode: "host"
+  redis-2:
+    <<: *redis-node
+    command:
+      - redis-server
+      - --port
+      - "7002"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7002"
+      - --cluster-announce-bus-port
+      - "17002"
+    ports:
+      - "7002:7002"
+      - "17002:17002"
+    network_mode: "host"
+  redis-3:
+    <<: *redis-node
+    command:
+      - redis-server
+      - --port
+      - "7003"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7003"
+      - --cluster-announce-bus-port
+      - "17003"
+    ports:
+      - "7003:7003"
+      - "17003:17003"
+    network_mode: "host"
+  redis-4:
+    <<: *redis-node
+    command:
+      - redis-server
+      - --port
+      - "7004"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7004"
+      - --cluster-announce-bus-port
+      - "17004"
+    ports:
+      - "7004:7004"
+      - "17004:17004"
+    network_mode: "host"
+  redis-5:
+    <<: *redis-node
+    command:
+      - redis-server
+      - --port
+      - "7005"
+      - --cluster-enabled
+      - "yes"
+      - --cluster-node-timeout
+      - "5000"
+      - --cluster-announce-ip
+      - "127.0.0.1"
+      - --cluster-announce-port
+      - "7005"
+      - --cluster-announce-bus-port
+      - "17005"
+    ports:
+      - "7005:7005"
+      - "17005:17005"
+    network_mode: "host"
+
+  # ---------- One-shot: form the cluster ----------
+  redis-cluster-init:
+    image: redis:7.2-alpine
+    network_mode: "host"
+    depends_on:
+      - redis-0
+      - redis-1
+      - redis-2
+      - redis-3
+      - redis-4
+      - redis-5
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 5;
+        redis-cli --cluster create \
+          127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 \
+          127.0.0.1:7003 127.0.0.1:7004 127.0.0.1:7005 \
+          --cluster-replicas 1 --cluster-yes
+    restart: "no"
+
+volumes:
+  pg_app_data:
+  mongo_data:
+  redpanda_data:
+  temporal_pg_data:
