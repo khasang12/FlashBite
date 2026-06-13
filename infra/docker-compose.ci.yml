@@ -36,3 +36,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis-cluster:
+    image: grokzen/redis-cluster:7.0.15
+    environment:
+      IP: 0.0.0.0
+      INITIAL_PORT: 7100
+      MASTERS: 3
+      SLAVES_PER_MASTER: 1
+    ports:
+      - "7100-7105:7100-7105"
+      - "17100-17105:17100-17105"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p 7100 cluster info | grep -q cluster_state:ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

@@ -11,6 +11,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://flashbite:local_dev_only_change_me@localhost:5434/flashbite_write
       KAFKA_BROKERS: localhost:9092
+      MONGO_URI: mongodb://localhost:27017/flashbite_read
+      REDIS_CLUSTER_NODES: 127.0.0.1:7100,127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103,127.0.0.1:7104,127.0.0.1:7105
     steps:
       - uses: actions/checkout@v4
 
