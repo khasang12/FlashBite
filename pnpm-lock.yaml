@@ -137,6 +137,21 @@ importers:
         specifier: 1.11.1
         version: 1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)
 
+  apps/telemetry-worker:
+    dependencies:
+      '@flashbite/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@flashbite/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      ioredis:
+        specifier: 5.4.1
+        version: 5.4.1
+      kafkajs:
+        specifier: 2.2.4
+        version: 2.2.4
+
   apps/write-api:
     dependencies:
       '@flashbite/contracts':
