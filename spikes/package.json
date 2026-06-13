@@ -1,0 +1,25 @@
+{
+  "name": "@flashbite/spikes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "kafka": "tsx src/kafka-partition.spike.ts",
+    "temporal:worker": "tsx src/temporal/worker.ts",
+    "temporal:run": "tsx src/temporal/run.spike.ts",
+    "outbox": "tsx src/outbox.spike.ts",
+    "redis": "tsx src/redis-cluster.spike.ts"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4",
+    "@temporalio/client": "1.11.1",
+    "@temporalio/worker": "1.11.1",
+    "@temporalio/workflow": "1.11.1",
+    "@temporalio/activity": "1.11.1",
+    "ioredis": "5.4.1",
+    "pg": "8.12.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.11.6"
+  }
+}
