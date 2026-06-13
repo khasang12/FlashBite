@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import {
+  CONSUMERS,
   EVENT_TYPES,
   ORDER_STATUS,
   READ_COLLECTIONS,
@@ -7,7 +8,7 @@ import {
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
 
-export const CONSUMER_NAME = "projection-worker";
+export const CONSUMER_NAME = CONSUMERS.PROJECTION;
 
 /**
  * Applies one event envelope to the read model. Inbox-dedup (Mongo) + idempotent

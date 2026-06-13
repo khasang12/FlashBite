@@ -1,36 +1,50 @@
 import {
+  AGGREGATE_TYPES,
+  ORDER_CANCEL_REASONS,
+  CONSUMER_GROUPS,
+  CONSUMERS,
   EVENT_TYPES,
-  buildEnvelope,
-  type OrderPlacedPayload,
+  ORDER_STATUS,
+  READ_COLLECTIONS,
+  ORDER_SAGA,
+  ORDER_SAGA_RESULTS,
+  TOPICS,
 } from "@flashbite/contracts";
 
-describe("buildEnvelope", () => {
-  const payload: OrderPlacedPayload = {
-    orderId: "o-1",
-    customerId: "c-1",
-    items: [{ sku: "pizza", qty: 1, price: 1200 }],
-    totalAmount: 1200,
-  };
-
-  it("builds a well-formed envelope", () => {
-    const env = buildEnvelope({
-      tenantId: "berlin",
-      eventType: EVENT_TYPES.ORDER_PLACED,
-      version: 1,
-      payload,
+describe("contracts constants", () => {
+  it("exposes stable event/aggregate/status values", () => {
+    expect(AGGREGATE_TYPES.ORDER).toBe("ORDER");
+    expect(EVENT_TYPES).toEqual({
+      ORDER_PLACED: "OrderPlaced",
+      ORDER_ACCEPTED: "OrderAccepted",
+      ORDER_CANCELLED: "OrderCancelled",
     });
-
-    expect(env.tenantId).toBe("berlin");
-    expect(env.eventType).toBe("OrderPlaced");
-    expect(env.version).toBe(1);
-    expect(env.payload).toEqual(payload);
-    expect(env.eventId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(() => new Date(env.occurredAt).toISOString()).not.toThrow();
+    expect(ORDER_STATUS).toEqual({ PLACED: "PLACED", ACCEPTED: "ACCEPTED", CANCELLED: "CANCELLED" });
   });
 
-  it("generates a unique eventId per call", () => {
-    const a = buildEnvelope({ tenantId: "berlin", eventType: "X", version: 1, payload });
-    const b = buildEnvelope({ tenantId: "berlin", eventType: "X", version: 1, payload });
-    expect(a.eventId).not.toBe(b.eventId);
+  it("exposes messaging + read-model names", () => {
+    expect(TOPICS.ORDER_EVENTS).toBe("order-events");
+    expect(TOPICS.TELEMETRY_STREAMS).toBe("telemetry-streams");
+    expect(CONSUMER_GROUPS).toEqual({
+      PROJECTION: "projection-worker",
+      SAGA: "saga-worker",
+      READ_API_SSE: "read-api-sse",
+    });
+    expect(CONSUMERS.PROJECTION).toBe("projection-worker");
+    expect(READ_COLLECTIONS).toEqual({ ORDERS: "orders", PROCESSED: "processed_events" });
+  });
+
+  it("exposes the saga descriptor consumed by saga-worker + write-api", () => {
+    expect(ORDER_SAGA).toEqual({
+      TASK_QUEUE: "order-lifecycle",
+      WORKFLOW_TYPE: "orderLifecycleWorkflow",
+      MERCHANT_APPROVAL_SIGNAL: "merchantApproval",
+    });
+    expect(ORDER_SAGA_RESULTS).toEqual({
+      ACCEPTED: "ACCEPTED",
+      CANCELLED_SLA: "CANCELLED_SLA",
+      CANCELLED_DECLINED: "CANCELLED_DECLINED",
+    });
+    expect(ORDER_CANCEL_REASONS).toEqual({ SLA_BREACH: "SLA_BREACH", DECLINED: "DECLINED" });
   });
 });

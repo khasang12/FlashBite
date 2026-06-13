@@ -4,10 +4,15 @@ import { WorkflowIdReusePolicy } from "@temporalio/client";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import { PrismaClient } from "@prisma/client";
 import { connectTemporal, loadConfig, type TemporalHandle } from "@flashbite/shared";
-import { EVENT_TYPES, TOPICS, type EventEnvelope, type OrderPlacedPayload } from "@flashbite/contracts";
+import {
+  CONSUMER_GROUPS,
+  EVENT_TYPES,
+  ORDER_SAGA,
+  TOPICS,
+  type EventEnvelope,
+  type OrderPlacedPayload,
+} from "@flashbite/contracts";
 import { createActivities } from "./activities";
-
-const TASK_QUEUE = "order-lifecycle";
 
 export interface SagaWorkerHandle {
   stop: () => Promise<void>;
@@ -23,7 +28,7 @@ export async function startSagaWorker(): Promise<SagaWorkerHandle> {
   const worker = await Worker.create({
     connection,
     namespace: "default",
-    taskQueue: TASK_QUEUE,
+    taskQueue: ORDER_SAGA.TASK_QUEUE,
     workflowsPath: path.join(__dirname, "workflows.ts"),
     activities: createActivities(prisma),
   });
@@ -54,8 +59,8 @@ export async function startOrderConsumer(
       if (envelope.eventType !== EVENT_TYPES.ORDER_PLACED) return;
       const p = envelope.payload as OrderPlacedPayload;
       try {
-        await temporal.client.workflow.start("orderLifecycleWorkflow", {
-          taskQueue: TASK_QUEUE,
+        await temporal.client.workflow.start(ORDER_SAGA.WORKFLOW_TYPE, {
+          taskQueue: ORDER_SAGA.TASK_QUEUE,
           workflowId: `${envelope.tenantId}:${p.orderId}`,
           workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
           args: [{ tenantId: envelope.tenantId, orderId: p.orderId, totalAmount: p.totalAmount, slaSeconds }],
@@ -77,7 +82,7 @@ async function main(): Promise<void> {
   const saga = await startSagaWorker();
   const temporal = await connectTemporal();
   const kafka = new Kafka({ clientId: "saga-worker", brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
-  const consumer = kafka.consumer({ groupId: "saga-worker" });
+  const consumer = kafka.consumer({ groupId: CONSUMER_GROUPS.SAGA });
   const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds);
 
   // eslint-disable-next-line no-console

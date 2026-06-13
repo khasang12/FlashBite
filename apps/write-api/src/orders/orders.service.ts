@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService, Prisma } from "@flashbite/shared";
+import { PrismaService, Prisma, buildEnvelope } from "@flashbite/shared";
 import { getTenantId } from "@flashbite/tenant-context";
 import {
+  AGGREGATE_TYPES,
   EVENT_TYPES,
   TOPICS,
-  buildEnvelope,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
 import { CreateOrderDto } from "./create-order.dto";
@@ -34,7 +34,7 @@ export class OrdersService {
           data: {
             id: envelope.eventId,
             tenantId,
-            aggregateType: "ORDER",
+            aggregateType: AGGREGATE_TYPES.ORDER,
             aggregateId: dto.orderId,
             version: 1,
             eventType: EVENT_TYPES.ORDER_PLACED,

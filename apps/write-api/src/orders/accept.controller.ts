@@ -1,8 +1,7 @@
 import { Controller, HttpCode, NotFoundException, Param, Post } from "@nestjs/common";
 import { getTenantId } from "@flashbite/tenant-context";
+import { ORDER_SAGA } from "@flashbite/contracts";
 import { TemporalService } from "../temporal/temporal.service";
-
-const MERCHANT_APPROVAL_SIGNAL = "merchantApproval";
 
 @Controller("orders")
 export class AcceptController {
@@ -24,7 +23,7 @@ export class AcceptController {
     const tenantId = getTenantId();
     const handle = this.temporal.client.workflow.getHandle(`${tenantId}:${orderId}`);
     try {
-      await handle.signal(MERCHANT_APPROVAL_SIGNAL, approved);
+      await handle.signal(ORDER_SAGA.MERCHANT_APPROVAL_SIGNAL, approved);
     } catch (err) {
       if (/not found|NotFound/i.test(String(err))) {
         throw new NotFoundException(`No active order workflow for ${orderId}`);

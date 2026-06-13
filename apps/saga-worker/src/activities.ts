@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { appendEvent } from "@flashbite/shared";
-import { EVENT_TYPES } from "@flashbite/contracts";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 
 /**
  * Activities are created with a Prisma client so they can append events. The
@@ -20,13 +20,13 @@ export function createActivities(prisma: PrismaClient) {
     },
     async recordOrderAcceptedActivity(tenantId: string, orderId: string): Promise<void> {
       await appendEvent(prisma, {
-        tenantId, aggregateType: "ORDER", aggregateId: orderId,
+        tenantId, aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId,
         eventType: EVENT_TYPES.ORDER_ACCEPTED, payload: { orderId },
       });
     },
     async recordOrderCancelledActivity(tenantId: string, orderId: string, reason: string): Promise<void> {
       await appendEvent(prisma, {
-        tenantId, aggregateType: "ORDER", aggregateId: orderId,
+        tenantId, aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId,
         eventType: EVENT_TYPES.ORDER_CANCELLED, payload: { orderId, reason },
       });
     },

@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
-import { buildEnvelope, TOPICS, type EventEnvelope } from "@flashbite/contracts";
+import { TOPICS, type EventEnvelope } from "@flashbite/contracts";
+import { buildEnvelope } from "./envelope";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 

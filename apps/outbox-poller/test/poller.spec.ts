@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Kafka, logLevel } from "kafkajs";
-import { PrismaService } from "@flashbite/shared";
-import { buildEnvelope, EVENT_TYPES, TOPICS } from "@flashbite/contracts";
+import { PrismaService, buildEnvelope } from "@flashbite/shared";
+import { EVENT_TYPES, TOPICS } from "@flashbite/contracts";
 import { pollOnce } from "../src/poller";
 
 describe("outbox poller", () => {

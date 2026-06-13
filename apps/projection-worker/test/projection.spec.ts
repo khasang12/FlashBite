@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { connectMongo, MongoHandle } from "@flashbite/shared";
+import { connectMongo, MongoHandle, buildEnvelope } from "@flashbite/shared";
 import {
-  buildEnvelope,
   EVENT_TYPES,
   READ_COLLECTIONS,
   type OrderPlacedPayload,

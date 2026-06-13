@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+// Pure domain contracts: types + constants only. No node:crypto / runtime I/O,
+// so this module is safe to import inside a Temporal workflow bundle.
+// (buildEnvelope lives in @flashbite/shared because it uses node:crypto.)
 
 export interface EventEnvelope<T = unknown> {
   tenantId: string;
@@ -22,32 +24,13 @@ export interface OrderPlacedPayload {
   totalAmount: number;
 }
 
-export const EVENT_TYPES = {
-  ORDER_PLACED: "OrderPlaced",
-  ORDER_ACCEPTED: "OrderAccepted",
-  ORDER_CANCELLED: "OrderCancelled",
-} as const;
+export interface OrderAcceptedPayload {
+  orderId: string;
+}
 
-export const TOPICS = {
-  ORDER_EVENTS: "order-events",
-} as const;
-
-export function buildEnvelope<T>(args: {
-  tenantId: string;
-  eventType: string;
-  version: number;
-  payload: T;
-  eventId?: string;
-  occurredAt?: string;
-}): EventEnvelope<T> {
-  return {
-    tenantId: args.tenantId,
-    eventId: args.eventId ?? randomUUID(),
-    eventType: args.eventType,
-    version: args.version,
-    occurredAt: args.occurredAt ?? new Date().toISOString(),
-    payload: args.payload,
-  };
+export interface OrderCancelledPayload {
+  orderId: string;
+  reason: string;
 }
 
 export interface OrderView {
@@ -61,22 +44,63 @@ export interface OrderView {
   updatedAt: string;
 }
 
+// ---- Event sourcing ----
+export const AGGREGATE_TYPES = {
+  ORDER: "ORDER",
+} as const;
+
+export const EVENT_TYPES = {
+  ORDER_PLACED: "OrderPlaced",
+  ORDER_ACCEPTED: "OrderAccepted",
+  ORDER_CANCELLED: "OrderCancelled",
+} as const;
+
 export const ORDER_STATUS = {
   PLACED: "PLACED",
   ACCEPTED: "ACCEPTED",
   CANCELLED: "CANCELLED",
 } as const;
 
-export interface OrderAcceptedPayload {
-  orderId: string;
-}
+// ---- Messaging ----
+export const TOPICS = {
+  ORDER_EVENTS: "order-events",
+  TELEMETRY_STREAMS: "telemetry-streams",
+} as const;
 
-export interface OrderCancelledPayload {
-  orderId: string;
-  reason: string;
-}
+/** Kafka consumer group ids — one per consuming service. */
+export const CONSUMER_GROUPS = {
+  PROJECTION: "projection-worker",
+  SAGA: "saga-worker",
+  READ_API_SSE: "read-api-sse",
+} as const;
 
+// ---- Read models ----
 export const READ_COLLECTIONS = {
   ORDERS: "orders",
   PROCESSED: "processed_events",
+} as const;
+
+/** Inbox consumer names (processed_events dedup key segment). */
+export const CONSUMERS = {
+  PROJECTION: "projection-worker",
+} as const;
+
+// ---- Temporal order-lifecycle saga ----
+export const ORDER_SAGA = {
+  TASK_QUEUE: "order-lifecycle",
+  WORKFLOW_TYPE: "orderLifecycleWorkflow",
+  MERCHANT_APPROVAL_SIGNAL: "merchantApproval",
+} as const;
+
+/** Terminal results returned by the order-lifecycle workflow. */
+export const ORDER_SAGA_RESULTS = {
+  ACCEPTED: "ACCEPTED",
+  CANCELLED_SLA: "CANCELLED_SLA",
+  CANCELLED_DECLINED: "CANCELLED_DECLINED",
+} as const;
+
+/** Reason recorded on an OrderCancelled event. */
+export const ORDER_CANCEL_REASONS = {
+  SLA_BREACH: "SLA_BREACH",
+  DECLINED: "DECLINED",
 } as const;
