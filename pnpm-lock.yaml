@@ -106,6 +106,37 @@ importers:
         specifier: 7.0.0
         version: 7.0.0
 
+  apps/saga-worker:
+    dependencies:
+      '@flashbite/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@flashbite/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@prisma/client':
+        specifier: 5.18.0
+        version: 5.18.0(prisma@5.18.0)
+      '@temporalio/activity':
+        specifier: 1.11.1
+        version: 1.11.1
+      '@temporalio/client':
+        specifier: 1.11.1
+        version: 1.11.1
+      '@temporalio/worker':
+        specifier: 1.11.1
+        version: 1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)
+      '@temporalio/workflow':
+        specifier: 1.11.1
+        version: 1.11.1
+      kafkajs:
+        specifier: 2.2.4
+        version: 2.2.4
+    devDependencies:
+      '@temporalio/testing':
+        specifier: 1.11.1
+        version: 1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)
+
   apps/write-api:
     dependencies:
       '@flashbite/contracts':
@@ -1166,6 +1197,9 @@ packages:
 
   '@temporalio/proto@1.11.1':
     resolution: {integrity: sha512-qTNSsU88IOJbv6lhWyW0qAHAYg4euEW/NNPgAp5ohfPkqaw+/j51QABO9E6m/KQwMZ6x43z2JjQRS37aC6Psiw==}
+
+  '@temporalio/testing@1.11.1':
+    resolution: {integrity: sha512-YV+fvILb+UL3wwb1F3kgCtYUb3rrxfMv3hAlknosTSMov02gjxFK4ll0OEAbrtS63pceMASahOhgJujmM9RLoA==}
 
   '@temporalio/worker@1.11.1':
     resolution: {integrity: sha512-PiYbPLUH0UIakVtcZzJ4064Z3bOYrk+pOL8w8YxBlE85IQKQG6tVm9yrqd/XpC9lk0JOJhdw6KLcm64kDRrryw==}
@@ -4532,6 +4566,32 @@ snapshots:
     dependencies:
       long: 5.3.2
       protobufjs: 7.6.4
+
+  '@temporalio/testing@1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)':
+    dependencies:
+      '@temporalio/activity': 1.11.1
+      '@temporalio/client': 1.11.1
+      '@temporalio/common': 1.11.1
+      '@temporalio/core-bridge': 1.11.1
+      '@temporalio/proto': 1.11.1
+      '@temporalio/worker': 1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)
+      '@temporalio/workflow': 1.11.1
+      abort-controller: 3.0.0
+    transitivePeerDependencies:
+      - '@minify-html/node'
+      - '@swc/css'
+      - '@swc/helpers'
+      - '@swc/html'
+      - clean-css
+      - cssnano
+      - csso
+      - esbuild
+      - html-minifier-terser
+      - lightningcss
+      - postcss
+      - tslib
+      - uglify-js
+      - webpack-cli
 
   '@temporalio/worker@1.11.1(@swc/helpers@0.5.23)(tslib@2.8.1)':
     dependencies:
