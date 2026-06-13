@@ -2,8 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "commonjs",
-    "moduleResolution": "node",
-    "rootDir": "src"
+    "moduleResolution": "node"
   },
   "include": ["src/**/*.ts"]
 }

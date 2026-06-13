@@ -3,9 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nest start -r tsconfig-paths/register",
-    "start:dev": "nest start --watch -r tsconfig-paths/register",
-    "build": "nest build"
+    "start": "tsx --tsconfig tsconfig.json src/main.ts"
   },
   "dependencies": {
     "@flashbite/contracts": "workspace:*",

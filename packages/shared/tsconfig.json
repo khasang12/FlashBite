@@ -4,8 +4,7 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "rootDir": "src"
+    "emitDecoratorMetadata": true
   },
   "include": ["src/**/*.ts"]
 }

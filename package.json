@@ -8,7 +8,9 @@
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:nuke": "docker compose -f infra/docker-compose.yml down -v",
     "infra:ps": "docker compose -f infra/docker-compose.yml ps",
-    "test": "jest"
+    "test": "jest",
+    "dev:write-api": "tsx --tsconfig apps/write-api/tsconfig.json --env-file=.env apps/write-api/src/main.ts",
+    "dev:outbox": "tsx --tsconfig apps/outbox-poller/tsconfig.json --env-file=.env apps/outbox-poller/src/main.ts"
   },
   "devDependencies": {
     "typescript": "5.5.4",

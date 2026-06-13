@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Inject } from "@nestjs/common";
 import { PrismaService, Prisma } from "@flashbite/shared";
 import { getTenantId } from "@flashbite/tenant-context";
 import {
@@ -11,7 +11,7 @@ import { CreateOrderDto } from "./create-order.dto";
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async placeOrder(dto: CreateOrderDto): Promise<{ orderId: string }> {
     const tenantId = getTenantId();
