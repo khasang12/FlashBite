@@ -1,0 +1,155 @@
+name: flashbite
+
+services:
+  # ---------- Application Postgres: event store + outbox ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flashbite
+      POSTGRES_PASSWORD: local_dev_only_change_me
+      POSTGRES_DB: flashbite_write
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_app_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashbite -d flashbite_write"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- MongoDB: read models ----------
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Redpanda: Kafka API + built-in Schema Registry ----------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:29092,external://0.0.0.0:9092
+      # external advertised on localhost so host-run spikes connect cleanly
+      - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=info
+    ports:
+      - "9092:9092"     # Kafka API (host)
+      - "18081:18081"   # Schema Registry (host)
+      - "9644:9644"     # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ---------- One-shot: create the shared multi-tenant topics ----------
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create order-events --partitions 6 --brokers redpanda:29092 || true
+        rpk topic create telemetry-streams --partitions 12 --brokers redpanda:29092 || true
+        rpk topic list --brokers redpanda:29092
+    restart: "no"
+
+  # ---------- Redpanda Console (observability UI) ----------
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    ports:
+      - "8085:8080"     # Console UI on host 8085 (8080 reserved for Temporal UI)
+
+  # ---------- Temporal's OWN Postgres (kept separate from app Postgres) ----------
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Temporal server (auto-setup) ----------
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      # Temporal >= 1.20 uses the postgres12 schema plugin, NOT 'postgresql'
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_SEEDS=temporal-postgres
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  # ---------- Temporal Web UI ----------
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8080:8080"
+
+  # ---------- Redis Cluster: single-container 6-node cluster ----------
+  # macOS Docker Desktop cannot expose discrete-container Redis Cluster nodes to the
+  # host (network_mode host binds inside the Linux VM only; bridge mode breaks gossip).
+  # grokzen runs 6 real redis processes forming one cluster in a single network
+  # namespace, with all node ports published so a Mac host client can follow MOVED
+  # redirects. Ports start at 7100 to avoid macOS AirPlay on 7000.
+  redis-cluster:
+    image: grokzen/redis-cluster:7.0.15
+    environment:
+      IP: 0.0.0.0
+      INITIAL_PORT: 7100
+      MASTERS: 3
+      SLAVES_PER_MASTER: 1
+    ports:
+      - "7100-7105:7100-7105"
+      - "17100-17105:17100-17105"
+
+volumes:
+  pg_app_data:
+  mongo_data:
+  redpanda_data:
+  temporal_pg_data:

@@ -238,11 +238,14 @@ Each phase is independently demoable and becomes its own `plan → implement` cy
 
 ### Phase 0 — Infra + isolation spikes (de-risk the unfamiliar)
 Stand up `docker-compose`: Postgres, Mongo, **Redis Cluster (6 nodes: 3 masters + 3
-replicas)**, **Redpanda** (+ Redpanda Console; built-in Schema Registry), Temporal (on
-its own DB). Four throwaway spikes, each a learning checkpoint with a "prove it works"
-exit: (a) Kafka produce→consume with a partition key (against Redpanda); (b) a Temporal
-hello-workflow with a timer + signal; (c) outbox row → poller → Kafka round-trip; (d)
-Redis Cluster forms quorum and `{tenant:id}` hash-tag keys land co-located on one slot.
+replicas — local macOS dev uses a single-container `grokzen/redis-cluster` image, ports
+7100-7105, which runs all 6 processes in one network namespace so the macOS host can
+follow MOVED redirects; the logical topology is identical)**, **Redpanda** (+ Redpanda
+Console; built-in Schema Registry), Temporal (on its own DB). Four throwaway spikes, each
+a learning checkpoint with a "prove it works" exit: (a) Kafka produce→consume with a
+partition key (against Redpanda); (b) a Temporal hello-workflow with a timer + signal; (c)
+outbox row → poller → Kafka round-trip; (d) Redis Cluster forms quorum and `{tenant:id}`
+hash-tag keys land co-located on one slot.
 **Exit:** all containers healthy; cluster reaches `cluster_state:ok`; each spike
 demonstrably runs.
 
@@ -312,4 +315,6 @@ NestJS (microservices, incl. a dedicated **identity service** issuing JWTs), Nex
 (UIs), **Kafka via Redpanda** + built-in Schema Registry
 (Avro) + Redpanda Console, Temporal (orchestration), PostgreSQL + Prisma (write side /
 event store / outbox), MongoDB (read models), **Redis Cluster** (6 nodes; cache + geo,
-tenant co-location via `{tenant:id}` hash tags). Local-only via `docker-compose`.
+tenant co-location via `{tenant:id}` hash tags; local macOS dev uses
+`grokzen/redis-cluster` single-container on ports 7100-7105). Local-only via
+`docker-compose`.
