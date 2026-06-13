@@ -2,17 +2,20 @@
 #
 # Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
 # Prereqs:
-#   pnpm infra:up          # Postgres + Redpanda running
-#   pnpm dev:write-api     # http://localhost:3001
-#   pnpm dev:outbox        # relays outbox -> order-events (optional, for the full flow)
+#   pnpm infra:up          # Postgres + Redpanda + MongoDB + Redis Cluster running
+#   pnpm dev:write-api     # http://localhost:3001 (command side)
+#   pnpm dev:outbox        # relays outbox -> order-events
+#   pnpm dev:projection    # order-events -> MongoDB read model
+#   pnpm dev:read-api      # http://localhost:3002 (query side: orders + SSE)
 #
 # Note on random ids: {{$guid}} is the VS Code REST Client generator.
 # In JetBrains HTTP Client use {{$random.uuid}} instead.
 
 @baseUrl = http://localhost:3001
+@readUrl = http://localhost:3002
 @tenant = berlin
 # Fixed id so the "place" + "re-place" pair below exercises idempotency.
-@orderId = 21111111-1111-1111-1111-111111111112
+@orderId = 41111111-1111-1111-1111-111111111112
 
 ### Health — resolves tenant from the X-Tenant-ID header
 GET {{baseUrl}}/health
@@ -94,6 +97,35 @@ X-Tenant-ID: {{tenant}}
   "items": [],
   "totalAmount": -5
 }
+
+# ============================================================================
+# read-api (query side, port 3002) — run after placing an order on write-api;
+# give dev:outbox + dev:projection a moment to flow the event into MongoDB.
+# ============================================================================
+
+### read-api health — resolves tenant from X-Tenant-ID
+GET {{readUrl}}/health
+X-Tenant-ID: {{tenant}}
+
+### Query the fixed order placed above. Expect 200 OrderView (status PLACED).
+### First call reads Mongo + populates the Redis cache; repeat within 10s = cache hit.
+GET {{readUrl}}/orders/{{orderId}}
+X-Tenant-ID: {{tenant}}
+
+### Query a non-existent order -> 404
+GET {{readUrl}}/orders/{{$guid}}
+X-Tenant-ID: {{tenant}}
+
+### Tenant isolation: the berlin order is NOT visible to tenant tokyo -> 404
+GET {{readUrl}}/orders/{{orderId}}
+X-Tenant-ID: tokyo
+
+### SSE merchant feed (streams live order events for the tenant).
+### This connection stays OPEN — place an order on write-api in another request
+### and watch the event arrive here. Cancel the request to close the stream.
+GET {{readUrl}}/merchant/orders/stream
+X-Tenant-ID: {{tenant}}
+Accept: text/event-stream
 
 # ----------------------------------------------------------------------------
 # Verifying side effects (run in a shell after POSTing):
