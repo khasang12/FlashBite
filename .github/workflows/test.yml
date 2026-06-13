@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Start CI infra (Postgres + Redpanda)
+      - name: Start CI infra (Postgres + Redpanda + MongoDB + Redis Cluster)
         run: docker compose -f infra/docker-compose.ci.yml up -d --wait
 
       - name: Create Kafka topics

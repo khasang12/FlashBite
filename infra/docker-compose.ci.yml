@@ -1,8 +1,8 @@
 name: flashbite-ci
 
-# Lightweight infra for CI: only the services the current test suite needs
-# (Postgres for the event store/outbox, Redpanda for the outbox-poller round-trip).
-# Redis Cluster / Mongo / Temporal are added here as later phases add tests that need them.
+# Infra for CI — the services the test suite needs:
+# Postgres (event store/outbox), Redpanda (Kafka), MongoDB (read models),
+# Redis Cluster (read-api cache). Temporal is added when later phases add tests for it.
 services:
   postgres:
     image: postgres:16-alpine

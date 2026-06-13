@@ -43,4 +43,9 @@ module.exports = {
   },
   testMatch: ["**/*.spec.ts", "**/*.e2e-spec.ts"],
   testTimeout: 20000,
+  // Integration suites boot real NestJS apps + Kafka/Mongo/Redis clients. Run files
+  // serially to avoid port/resource contention between parallel e2e apps, and force a
+  // clean exit since long-lived clients keep handles open past afterAll teardown.
+  maxWorkers: 1,
+  forceExit: true,
 };
