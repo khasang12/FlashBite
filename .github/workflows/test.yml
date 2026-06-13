@@ -1,0 +1,49 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://flashbite:local_dev_only_change_me@localhost:5434/flashbite_write
+      KAFKA_BROKERS: localhost:9092
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start CI infra (Postgres + Redpanda)
+        run: docker compose -f infra/docker-compose.ci.yml up -d --wait
+
+      - name: Create Kafka topics
+        run: |
+          docker compose -f infra/docker-compose.ci.yml exec -T redpanda \
+            rpk topic create order-events --partitions 6 --brokers redpanda:29092
+          docker compose -f infra/docker-compose.ci.yml exec -T redpanda \
+            rpk topic create telemetry-streams --partitions 12 --brokers redpanda:29092
+
+      - name: Generate Prisma client + apply migrations
+        run: |
+          pnpm --filter @flashbite/shared exec prisma generate --schema prisma/schema.prisma
+          pnpm --filter @flashbite/shared exec prisma migrate deploy --schema prisma/schema.prisma
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Tear down infra
+        if: always()
+        run: docker compose -f infra/docker-compose.ci.yml down -v

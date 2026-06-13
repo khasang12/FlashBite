@@ -13,7 +13,7 @@ pnpm infra:nuke    # stop and delete all volumes (clean slate)
 
 | Service           | Host port(s)          | Purpose                                   |
 |-------------------|-----------------------|-------------------------------------------|
-| postgres          | 5432                  | App event store + outbox                  |
+| postgres          | 5434                  | App event store + outbox                  |
 | mongodb           | 27017                 | Read models                               |
 | redpanda          | 9092, 18081, 9644     | Kafka API, Schema Registry, Admin         |
 | redpanda-console  | 8085                  | Kafka/topic observability UI              |
