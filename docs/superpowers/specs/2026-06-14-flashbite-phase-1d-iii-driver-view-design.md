@@ -118,12 +118,12 @@ admin telemetry canvas (1d-iv); auth/JWT (Phase 2).
 
 ## Testing
 
-- **Vitest (`web-shared`)**: `reportLocation`/`getNearbyDrivers` request shape + `X-Tenant-ID`
-  + proxy paths; `randomWalk` (output within `±step`, stays in valid bounds); `CITY_CENTERS`
-  per-tenant; the self-filter (caller's `driverId` excluded from the nearby table data).
-- **Jest/RTL (`apps/web-driver`)**: `NearbyTable` renders rows from props with the self filtered
-  out and distance formatted; `NearbyMap` token-missing fallback renders (no WebGL needed).
-- **Playwright e2e (`apps/web-driver`)**: go online → assert the status shows "streaming" and
+- **Vitest (`web-shared`)** — the single frontend unit-test home (apps carry no unit tests, per
+  the web-customer/web-merchant pattern): `reportLocation`/`getNearbyDrivers` request shape +
+  `X-Tenant-ID` + proxy paths; `randomWalk` (output within `±step`, stays in valid bounds);
+  `CITY_CENTERS` per-tenant; `toNearbyRows` (caller's `driverId` excluded + distance formatted).
+- **Playwright e2e (`apps/web-driver`)** — covers the components (NearbyTable, NearbyMap,
+  useGpsEmitter wiring): go online → assert the status shows "streaming" and
   at least one `POST …/drivers/:id/location` returns 202 (or a ping counter increments), and a
   nearby refresh occurs (table populates). Tenant-scoped. Map tiles are not asserted (WebGL/token
   dependent). (Needs read-api + telemetry-worker + infra running.)
