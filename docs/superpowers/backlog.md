@@ -39,3 +39,31 @@ history is buffered and **backfillable** once the archiver + sink land.
 
 Telemetry stays out of the event store (not part of the order aggregate); this analytics
 plane is independent of the "telemetry is ephemeral" decision for the live layer.
+
+## Push-based live order status (replace customer polling with SSE)
+
+**Goal:** The customer order-tracking page (`apps/web-customer/app/orders/[orderId]/page.tsx`)
+currently **polls** `GET /api/read/orders/:id` every 2s until the order reaches a terminal
+status. Replace the poll with a **push** channel so the UI updates instantly and stops
+hammering the read API.
+
+**Why:** Polling forces a cap-vs-SLA tuning problem — the FE must keep polling longer than
+`SAGA_SLA_SECONDS` (default 300s) just to catch the SLA-breach `CANCELLED`. It also wastes
+requests while a `PLACED` order waits out the merchant SLA. A push channel removes the
+tuning entirely and is the right fit for live status.
+
+**Where the infra already exists:** read-api already runs an SSE feeder
+(`GET /merchant/orders/stream`, consumer group `read-api-sse`) that filters `order-events`
+by tenant. That stream is **tenant-wide (merchant view)**, not per-order/per-customer.
+
+**Rough shape:**
+1. Add a customer-facing SSE endpoint (e.g. `GET /orders/:id/stream`, tenant-scoped) that
+   emits status transitions for one order from the `order-events` subscription, closing on
+   terminal status.
+2. Frontend: a small `useOrderStream(orderId)` hook in `web-shared` (EventSource via the
+   same-origin rewrite) replaces the poll loop; keep a short poll/refetch as a fallback for
+   reconnects.
+3. When the merchant dashboard (1d-ii) lands, both surfaces share the same SSE plumbing.
+
+Until then, the tracking page polls with a bounded cap (>SLA) + tab-hidden pause + manual
+refresh — adequate, but the SSE channel is the proper fix.
