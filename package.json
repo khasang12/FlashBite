@@ -13,7 +13,8 @@
     "dev:outbox": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/outbox-poller/src/main.ts",
     "dev:read-api": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/read-api/src/main.ts",
     "dev:projection": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/projection-worker/src/main.ts",
-    "dev:saga": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/saga-worker/src/main.ts"
+    "dev:saga": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/saga-worker/src/main.ts",
+    "dev:telemetry": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/telemetry-worker/src/main.ts"
   },
   "devDependencies": {
     "@swc-node/register": "^1.11.1",

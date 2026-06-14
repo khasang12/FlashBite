@@ -33,6 +33,19 @@ export interface OrderCancelledPayload {
   reason: string;
 }
 
+export interface DriverTelemetryPayload {
+  driverId: string;
+  orderId?: string;
+  lng: number;
+  lat: number;
+}
+
+/** Per-tenant Redis geo key for live driver locations. The {tenant:id} hash tag
+ *  co-locates the key on one cluster slot (GEO commands operate on a single key). */
+export function driverGeoKey(tenantId: string): string {
+  return `{tenant:${tenantId}}:drivers:geo`;
+}
+
 export interface OrderView {
   tenantId: string;
   orderId: string;
@@ -53,6 +66,7 @@ export const EVENT_TYPES = {
   ORDER_PLACED: "OrderPlaced",
   ORDER_ACCEPTED: "OrderAccepted",
   ORDER_CANCELLED: "OrderCancelled",
+  DRIVER_TELEMETRY_STREAMED: "DriverTelemetryStreamed",
 } as const;
 
 export const ORDER_STATUS = {
@@ -72,6 +86,7 @@ export const CONSUMER_GROUPS = {
   PROJECTION: "projection-worker",
   SAGA: "saga-worker",
   READ_API_SSE: "read-api-sse",
+  TELEMETRY: "telemetry-worker",
 } as const;
 
 // ---- Read models ----
