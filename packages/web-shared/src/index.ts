@@ -74,3 +74,4 @@ export {
   SheetDescription,
 } from "./components/ui/sheet";
 export { DataTable, type DataTableProps } from "./components/data-table";
+export type { ColumnDef } from "@tanstack/react-table";
