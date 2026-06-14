@@ -92,3 +92,24 @@ events + endpoints, mirroring the merchant-approval pattern.
 
 Phase 1d-iii ships the telemetry/GPS surface (option A); this entry is the deferred
 order↔driver integration (option B).
+
+## Microfrontend shell — unify the three frontends (architecture phase)
+
+**Goal:** Compose `web-customer` (3100), `web-merchant` (3101), and `web-driver` (3102) into a
+single coherent product shell once the end-to-end ordering flow (incl. driver dispatch) is in
+place, instead of three independently-served Next.js apps.
+
+**Why later, not now:** today the three surfaces serve disjoint roles with no shared in-app
+navigation, so standalone apps on separate ports are the simplest thing that works. A
+microfrontend composition only earns its complexity once a user needs to move between surfaces
+in one session (e.g. an operator/admin view, or the unified ordering flow spanning customer →
+merchant → driver).
+
+**Options to weigh when it lands:**
+- **Next.js Multi-Zones** — each app owns a path prefix under one origin (`/`, `/merchant`,
+  `/driver`); simplest, framework-native, independent deploys, no runtime federation.
+- **Module Federation** (`@module-federation/nextjs-mf`) — runtime-shared components/remotes;
+  more powerful, more operational complexity; justified only if surfaces must share live state.
+
+`packages/web-shared` already gives a shared design system + API client, so most of the
+de-duplication value is captured; this entry is about navigation/routing/deploy composition.
