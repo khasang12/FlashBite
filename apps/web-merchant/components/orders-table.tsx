@@ -3,7 +3,7 @@ import { DataTable, StatusPill, type ColumnDef, type OrderView } from "@flashbit
 
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 const shortId = (id: string) => `#${id.slice(0, 8)}`;
-const itemsSummary = (o: OrderView) => o.items.map((i) => `${i.sku} ×${i.qty}`).join(", ");
+const itemsSummary = (o: OrderView) => (o.items ?? []).map((i) => `${i.sku} ×${i.qty}`).join(", ");
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export const orderColumns: ColumnDef<OrderView>[] = [

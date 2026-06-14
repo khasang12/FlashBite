@@ -48,7 +48,7 @@ export function OrderDetailSheet({
             <div className="font-semibold">{order.customerId}</div>
             <div className="mt-4 text-sm text-muted-foreground">Items</div>
             <div className="mt-1 space-y-1">
-              {order.items.map((i) => (
+              {(order.items ?? []).map((i) => (
                 <div key={i.sku} className="flex justify-between text-sm">
                   <span>{i.sku} ×{i.qty}</span><span>{euro(i.price * i.qty)}</span>
                 </div>

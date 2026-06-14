@@ -25,9 +25,19 @@ export default function Dashboard() {
     if (ordersRef.current.some((r) => r.orderId === e.orderId)) {
       setOrders((rows) => applyOrderEvent(rows, e));
     } else if (statusFromEventType(e.eventType) === ORDER_STATUS.PLACED) {
-      getOrder(tenant, e.orderId)
-        .then((o) => { if (o) setOrders((cur) => upsertOrder(cur, o)); })
-        .catch(() => {});
+      // The OrderPlaced SSE event and the read-model projection are driven by the
+      // same order-events topic, so the event can beat the Mongo write. Retry
+      // getOrder until the projection catches up (bounded) instead of dropping it.
+      let tries = 0;
+      const fetchRow = (): void => {
+        getOrder(tenant, e.orderId)
+          .then((o) => {
+            if (o) { setOrders((cur) => upsertOrder(cur, o)); return; }
+            if (++tries < 10) setTimeout(fetchRow, 500);
+          })
+          .catch(() => {});
+      };
+      fetchRow();
     }
   }, [tenant]);
 
