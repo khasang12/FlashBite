@@ -28,6 +28,8 @@ export function useGpsEmitter(tenant: Tenant, driverId: string, online: boolean)
 
   useEffect(() => {
     if (!online) {
+      // Reset to the idle snapshot when the driver goes offline (dep-driven reset).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState(IDLE);
       return;
     }
