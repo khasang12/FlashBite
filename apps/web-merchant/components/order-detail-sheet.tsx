@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, Button, StatusPill,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, Button, StatusPill,
   acceptOrder, declineOrder, ORDER_STATUS, type OrderView,
 } from "@flashbite/web-shared";
 
@@ -42,6 +42,7 @@ export function OrderDetailSheet({
           <>
             <SheetHeader>
               <SheetTitle>Order #{order.orderId.slice(0, 8)}</SheetTitle>
+              <SheetDescription>Order details and merchant actions.</SheetDescription>
             </SheetHeader>
             <div className="mt-3"><StatusPill status={order.status} /></div>
             <div className="mt-4 text-sm text-muted-foreground">Customer</div>
