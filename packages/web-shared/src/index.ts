@@ -53,3 +53,24 @@ export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";
 export { useOrderStream, parseStreamData } from "./orders/use-order-stream";
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "./components/ui/table";
+export {
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+} from "./components/ui/sheet";
+export { DataTable, type DataTableProps } from "./components/data-table";
