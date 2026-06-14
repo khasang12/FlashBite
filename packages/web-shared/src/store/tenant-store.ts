@@ -30,6 +30,6 @@ interface TenantState {
 export const useTenantStore = create<TenantState>()(
   persist(
     (set) => ({ tenant: "berlin", setTenant: (tenant) => set({ tenant }) }),
-    { name: "fb-tenant", storage: createJSONStorage(() => cookieStorage) },
+    { name: "fb-tenant", storage: createJSONStorage(() => cookieStorage), skipHydration: true },
   ),
 );
