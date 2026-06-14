@@ -35,3 +35,25 @@ export async function getOrder(
   if (!res.ok) throw new Error(`getOrder failed: ${res.status}`);
   return (await res.json()) as OrderView;
 }
+
+/** GET /merchant/orders via the same-origin read proxy. Returns all orders for the tenant. */
+export async function listOrders(tenantId: string): Promise<OrderView[]> {
+  const res = await fetch("/api/read/merchant/orders", { headers: tenantHeader(tenantId) });
+  if (!res.ok) throw new Error(`listOrders failed: ${res.status}`);
+  return (await res.json()) as OrderView[];
+}
+
+async function signalOrder(tenantId: string, orderId: string, action: "accept" | "decline"): Promise<void> {
+  const res = await fetch(`/api/write/orders/${encodeURIComponent(orderId)}/${action}`, {
+    method: "POST",
+    headers: tenantHeader(tenantId),
+  });
+  if (!res.ok) throw new Error(`${action}Order failed: ${res.status}`);
+}
+
+export function acceptOrder(tenantId: string, orderId: string): Promise<void> {
+  return signalOrder(tenantId, orderId, "accept");
+}
+export function declineOrder(tenantId: string, orderId: string): Promise<void> {
+  return signalOrder(tenantId, orderId, "decline");
+}
