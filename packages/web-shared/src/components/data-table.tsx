@@ -30,6 +30,7 @@ export interface DataTableProps<TData, TValue> {
   globalFilter?: string;
   onRowClick?: (row: TData) => void;
   pageSize?: number;
+  emptyMessage?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -39,6 +40,7 @@ export function DataTable<TData, TValue>({
   globalFilter,
   onRowClick,
   pageSize = 10,
+  emptyMessage = "No orders yet.",
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -90,7 +92,7 @@ export function DataTable<TData, TValue>({
               colSpan={columns.length}
               className="h-24 text-center text-muted-foreground"
             >
-              No orders yet.
+              {emptyMessage}
             </TableCell>
           </TableRow>
         ) : (
