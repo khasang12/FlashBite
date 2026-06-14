@@ -61,8 +61,10 @@ channel (separate backlog item); driver/admin surfaces.
   - A generic **`DataTable`** wrapper over **`@tanstack/react-table`** (column defs in, sorted/
     filterable table out) — reusable by the admin grid (1d-iv).
   - API client: `listOrders(tenant): OrderView[]`, `acceptOrder(tenant, id)`, `declineOrder(tenant, id)`.
-  - `useOrderStream(tenant)` — opens `EventSource('/api/read/merchant/orders/stream')`, yields
+  - `useOrderStream(tenant)` — subscribes to `/api/read/merchant/orders/stream` and yields
     parsed `{ orderId, eventType }` events; closes on unmount; consumers re-sync on reconnect.
+    Implemented with **`@microsoft/fetch-event-source`** (fetch-based), NOT the browser
+    `EventSource` API, because `EventSource` cannot set the required `X-Tenant-ID` header.
   - A pure `statusFromEventType(eventType)` helper (`OrderPlaced`→PLACED, `OrderAccepted`→
     ACCEPTED, `OrderCancelled`→CANCELLED).
 
