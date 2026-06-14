@@ -52,3 +52,4 @@ export { useCartStore, type CartLine } from "./store/cart-store";
 export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";
+export { useOrderStream, parseStreamData } from "./orders/use-order-stream";
