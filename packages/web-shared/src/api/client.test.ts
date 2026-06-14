@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { placeOrder, getOrder, listOrders, acceptOrder, declineOrder, type PlaceOrderRequest } from "./client";
+import { placeOrder, getOrder, listOrders, acceptOrder, declineOrder, reportLocation, getNearbyDrivers, type PlaceOrderRequest } from "./client";
 
 describe("api client", () => {
   beforeEach(() => {
@@ -74,5 +74,51 @@ describe("api client", () => {
     expect(url).toBe("/api/write/orders/o-1/decline");
     expect(init.method).toBe("POST");
     expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+  });
+
+  it("reportLocation POSTs to the read proxy with the tenant header and body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await reportLocation("berlin", "drv-1", { lng: 13.4, lat: 52.5 });
+
+    expect(res).toEqual({ driverId: "drv-1" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/read/drivers/drv-1/location");
+    expect(init.method).toBe("POST");
+    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+    expect(init.headers["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(init.body)).toEqual({ lng: 13.4, lat: 52.5 });
+  });
+
+  it("reportLocation includes orderId when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await reportLocation("berlin", "drv-1", { lng: 1, lat: 2, orderId: "o-9" });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ lng: 1, lat: 2, orderId: "o-9" });
+  });
+
+  it("getNearbyDrivers GETs the nearby query with coords + radius and tenant header", async () => {
+    const rows = [{ driverId: "drv-7", distanceKm: 0.4, lng: 13.41, lat: 52.53 }];
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await getNearbyDrivers("tokyo", 139.7, 35.68, 5);
+
+    expect(res).toEqual(rows);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/read/drivers/nearby?lng=139.7&lat=35.68&radiusKm=5");
+    expect(init.headers["X-Tenant-ID"]).toBe("tokyo");
+  });
+
+  it("getNearbyDrivers defaults radiusKm to 5", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await getNearbyDrivers("berlin", 13.4, 52.5);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/read/drivers/nearby?lng=13.4&lat=52.5&radiusKm=5");
   });
 });
