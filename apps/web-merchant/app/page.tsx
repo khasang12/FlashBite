@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listOrders, getOrder, useOrderStream, applyOrderEvent, upsertOrder,
-  statusFromEventType, useTenantStore, Input, ORDER_STATUS, type OrderView, type OrderStreamEvent,
+  statusFromEventType, useTenantStore, Input, ORDER_STATUS,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  type OrderView, type OrderStreamEvent,
 } from "@flashbite/web-shared";
 import { OrdersTable } from "@/components/orders-table";
 import { OrderDetailSheet } from "@/components/order-detail-sheet";
@@ -13,6 +15,7 @@ export default function Dashboard() {
   const ordersRef = useRef(orders);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
   const [filter, setFilter] = useState("");
+  const [status, setStatus] = useState<string>("ALL");
   const [selected, setSelected] = useState<OrderView | null>(null);
 
   const resync = useCallback(() => {
@@ -44,6 +47,7 @@ export default function Dashboard() {
   useOrderStream(tenant, onEvent, resync);
 
   const current = selected ? orders.find((o) => o.orderId === selected.orderId) ?? selected : null;
+  const visible = status === "ALL" ? orders : orders.filter((o) => o.status === status);
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,8 +58,19 @@ export default function Dashboard() {
       <main className="mx-auto max-w-5xl px-6 py-6">
         <div className="mb-4 flex items-center gap-3">
           <Input placeholder="Search order id / customer" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search orders" className="max-w-xs" />
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-40" aria-label="Filter by status">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All statuses</SelectItem>
+              <SelectItem value={ORDER_STATUS.PLACED}>Placed</SelectItem>
+              <SelectItem value={ORDER_STATUS.ACCEPTED}>Accepted</SelectItem>
+              <SelectItem value={ORDER_STATUS.CANCELLED}>Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <OrdersTable data={orders} globalFilter={filter} onRowClick={setSelected} />
+        <OrdersTable data={visible} globalFilter={filter} onRowClick={setSelected} />
       </main>
       <OrderDetailSheet order={current} tenant={tenant} onClose={() => setSelected(null)} />
     </div>

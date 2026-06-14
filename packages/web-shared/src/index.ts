@@ -75,3 +75,13 @@ export {
 } from "./components/ui/sheet";
 export { DataTable, type DataTableProps } from "./components/data-table";
 export type { ColumnDef } from "@tanstack/react-table";
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+} from "./components/ui/select";

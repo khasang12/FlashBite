@@ -30,7 +30,8 @@ test("an incoming order appears, can be accepted, and flips to ACCEPTED", async 
   }
 });
 
-test("status filter is present and the table renders", async ({ page }) => {
+test("status filter and search controls are present", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByPlaceholder("Search order id / customer")).toBeVisible();
+  await expect(page.getByLabel("Filter by status")).toBeVisible();
 });
