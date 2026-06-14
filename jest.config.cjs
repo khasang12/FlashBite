@@ -6,6 +6,7 @@ const paths = {
   "@flashbite/contracts": ["packages/contracts/src/index.ts"],
   "@flashbite/shared": ["packages/shared/src/index.ts"],
   "@flashbite/tenant-context": ["packages/tenant-context/src/index.ts"],
+  "@flashbite/web-shared": ["packages/web-shared/src/index.ts"],
 };
 
 const rootDir = __dirname;
@@ -48,4 +49,5 @@ module.exports = {
   // clean exit since long-lived clients keep handles open past afterAll teardown.
   maxWorkers: 1,
   forceExit: true,
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/apps/web-customer/"],
 };

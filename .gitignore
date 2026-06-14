@@ -7,3 +7,6 @@ pnpm-debug.log*
 .DS_Store
 # docker named-volume data never lives in-repo, but ignore stray dumps
 *.rdb
+.superpowers/
+playwright-report/
+test-results/
