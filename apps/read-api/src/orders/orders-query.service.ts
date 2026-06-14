@@ -37,4 +37,25 @@ export class OrdersQueryService {
     await this.redis.cluster.set(cacheKey, JSON.stringify(view), "EX", CACHE_TTL_SECONDS);
     return view;
   }
+
+  /** Tenant's most-recent orders (all statuses) for the merchant dashboard. Capped. */
+  async listRecentOrders(limit = 100): Promise<OrderView[]> {
+    const tenantId = getTenantId();
+    const docs = await this.mongo.db
+      .collection(READ_COLLECTIONS.ORDERS)
+      .find({ tenantId })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({
+      tenantId: doc.tenantId,
+      orderId: doc.orderId,
+      customerId: doc.customerId,
+      items: doc.items,
+      totalAmount: doc.totalAmount,
+      status: doc.status,
+      version: doc.version,
+      updatedAt: doc.updatedAt,
+    }));
+  }
 }
