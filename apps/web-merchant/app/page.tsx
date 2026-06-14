@@ -1,18 +1,39 @@
 "use client";
-import { useEffect, useState } from "react";
-import { listOrders, useTenantStore, Input, type OrderView } from "@flashbite/web-shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  listOrders, getOrder, useOrderStream, applyOrderEvent, upsertOrder,
+  statusFromEventType, useTenantStore, Input, ORDER_STATUS, type OrderView, type OrderStreamEvent,
+} from "@flashbite/web-shared";
 import { OrdersTable } from "@/components/orders-table";
+import { OrderDetailSheet } from "@/components/order-detail-sheet";
 
 export default function Dashboard() {
   const tenant = useTenantStore((s) => s.tenant);
   const [orders, setOrders] = useState<OrderView[]>([]);
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
   const [filter, setFilter] = useState("");
+  const [selected, setSelected] = useState<OrderView | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    listOrders(tenant).then((rows) => { if (active) setOrders(rows); }).catch(() => { if (active) setOrders([]); });
-    return () => { active = false; };
+  const resync = useCallback(() => {
+    listOrders(tenant).then(setOrders).catch(() => setOrders([]));
   }, [tenant]);
+
+  useEffect(() => { resync(); }, [resync]);
+
+  const onEvent = useCallback((e: OrderStreamEvent) => {
+    if (ordersRef.current.some((r) => r.orderId === e.orderId)) {
+      setOrders((rows) => applyOrderEvent(rows, e));
+    } else if (statusFromEventType(e.eventType) === ORDER_STATUS.PLACED) {
+      getOrder(tenant, e.orderId)
+        .then((o) => { if (o) setOrders((cur) => upsertOrder(cur, o)); })
+        .catch(() => {});
+    }
+  }, [tenant]);
+
+  useOrderStream(tenant, onEvent, resync);
+
+  const current = selected ? orders.find((o) => o.orderId === selected.orderId) ?? selected : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -24,8 +45,9 @@ export default function Dashboard() {
         <div className="mb-4 flex items-center gap-3">
           <Input placeholder="Search order id / customer" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search orders" className="max-w-xs" />
         </div>
-        <OrdersTable data={orders} globalFilter={filter} onRowClick={() => { /* sheet in Task 8 */ }} />
+        <OrdersTable data={orders} globalFilter={filter} onRowClick={setSelected} />
       </main>
+      <OrderDetailSheet order={current} tenant={tenant} onClose={() => setSelected(null)} />
     </div>
   );
 }
