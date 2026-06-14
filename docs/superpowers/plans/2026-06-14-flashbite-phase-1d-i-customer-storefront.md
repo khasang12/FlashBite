@@ -219,6 +219,8 @@ End body with the `Co-Authored-By` trailer.
 
 ## Task 3: Design tokens + Manrope (shared theme)
 
+> **SUPERSEDED (Tailwind v4):** The scaffold installed **Tailwind v4** (CSS-first — `@import "tailwindcss"`, `@theme inline`, `@tailwindcss/postcss`; no `tailwind.config.ts`, no JS preset). The original Tasks 3 and 4 below assumed Tailwind v3 and are replaced by a **single combined design-system task** executed against v4: shadcn/ui init in `web-shared`, FlashBite CSS-variable tokens (green `#06C167` primary + status palette + radius), Manrope, and `@source` wiring so the app scans `web-shared`. The controller dispatches the authoritative combined instructions; the v3-style steps below are retained only for reference.
+
 **Files:**
 - Create: `packages/web-shared/src/styles/theme.css`, `packages/web-shared/tailwind-preset.ts`
 - Modify: `apps/web-customer/tailwind.config.ts`, `apps/web-customer/app/globals.css`, `apps/web-customer/app/layout.tsx`
