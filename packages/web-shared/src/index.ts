@@ -44,3 +44,6 @@ export {
   CarouselPrevious,
   CarouselNext,
 } from "./components/ui/carousel";
+
+export { placeOrder, getOrder, type PlaceOrderRequest } from "./api/client";
+export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
