@@ -23,7 +23,9 @@
 #
 # Prereq: infra up (pnpm infra:up) + read-api (pnpm dev:read-api) + worker (pnpm dev:telemetry).
 
-set -euo pipefail
+# No `set -e`: this is a long-running loop that must survive transient errors
+# (e.g. read-api momentarily down) and keep streaming until the user stops it.
+set -u
 
 BASE_URL="${BASE_URL:-http://localhost:3002}"
 TENANT="${TENANT:-berlin}"
@@ -53,8 +55,9 @@ echo "streaming GPS: driver=${DRIVER} tenant=${TENANT} -> ${BASE_URL} every ${IN
 
 while true; do
   # Random walk: nudge lng/lat by a delta in [-STEP, STEP] so the driver "moves".
+  # Note the trailing \n in printf: without it `read` returns non-zero at EOF.
   read -r LNG LAT < <(awk -v lng="$LNG" -v lat="$LAT" -v step="$STEP" \
-    'BEGIN { srand(); printf "%.6f %.6f", lng + (rand() * 2 - 1) * step, lat + (rand() * 2 - 1) * step }')
+    'BEGIN { srand(); printf "%.6f %.6f\n", lng + (rand() * 2 - 1) * step, lat + (rand() * 2 - 1) * step }')
 
   if ! http=$(curl -s -o "$RESP_FILE" -w '%{http_code}' \
       -X POST "${BASE_URL}/drivers/${DRIVER}/location" \
