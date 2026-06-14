@@ -15,9 +15,10 @@ import { Header } from "@/components/header";
 
 const TERMINAL = [ORDER_STATUS.ACCEPTED, ORDER_STATUS.CANCELLED] as string[];
 const POLL_MS = 2000;
-// Stop polling after this many *visible* attempts (~3 min) so a PLACED order that
-// never resolves (e.g. no merchant accept and no saga SLA timer) can't poll forever.
-const MAX_ATTEMPTS = 90;
+// Stop polling after this many *visible* attempts (~5.5 min) so a PLACED order
+// that never resolves can't poll forever, while still outlasting the saga SLA
+// timer (default SAGA_SLA_SECONDS=300) so the FE catches the auto-cancel.
+const MAX_ATTEMPTS = 170;
 
 export default function OrderTracking({
   params,
