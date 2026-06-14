@@ -47,3 +47,5 @@ export {
 
 export { placeOrder, getOrder, type PlaceOrderRequest } from "./api/client";
 export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
+export { useCartStore, type CartLine } from "./store/cart-store";
+export { getMenu, getPopular, type MenuItem } from "./menu/seed";
