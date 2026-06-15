@@ -5,6 +5,7 @@ export interface RedisNode {
 
 export interface AppConfig {
   databaseUrl: string;
+  appDatabaseUrl: string;
   kafkaBrokers: string[];
   defaultTenantId: string;
   mongoUri: string;
@@ -34,6 +35,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     });
   return {
     databaseUrl,
+    appDatabaseUrl: env.APP_DATABASE_URL ?? databaseUrl,
     kafkaBrokers: (env.KAFKA_BROKERS ?? "localhost:9092").split(","),
     defaultTenantId: env.DEFAULT_TENANT_ID ?? DEFAULT_TENANT_ID,
     mongoUri: env.MONGO_URI ?? "mongodb://localhost:27017/flashbite_read",

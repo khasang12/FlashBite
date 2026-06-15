@@ -28,6 +28,15 @@ describe("loadConfig", () => {
   });
 });
 
+describe("loadConfig appDatabaseUrl", () => {
+  it("uses APP_DATABASE_URL when set, else falls back to DATABASE_URL", () => {
+    const withApp = loadConfig({ DATABASE_URL: "postgres://owner", APP_DATABASE_URL: "postgres://app" });
+    expect(withApp.appDatabaseUrl).toBe("postgres://app");
+    const noApp = loadConfig({ DATABASE_URL: "postgres://owner" });
+    expect(noApp.appDatabaseUrl).toBe("postgres://owner");
+  });
+});
+
 describe("loadConfig JWT settings", () => {
   const base = { DATABASE_URL: "postgres://x" };
 
