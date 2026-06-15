@@ -5,7 +5,7 @@ import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { AppModule } from "../src/app.module";
 import { MongoService, RedisService } from "@flashbite/shared";
-import { READ_COLLECTIONS, ORDER_STATUS } from "@flashbite/contracts";
+import { READ_COLLECTIONS, ORDER_STATUS, tenantKey } from "@flashbite/contracts";
 
 describe("read-api orders cache-aside (e2e)", () => {
   let app: INestApplication;
@@ -23,7 +23,7 @@ describe("read-api orders cache-aside (e2e)", () => {
   it("populates the redis cache on first read and serves the cached value after", async () => {
     const orderId = randomUUID();
     const id = `berlin:${orderId}`;
-    const cacheKey = `{tenant:berlin}:order:${orderId}:view`;
+    const cacheKey = tenantKey("berlin", "order", orderId, "view");
     await mongo.db.collection(READ_COLLECTIONS.ORDERS).insertOne({
       _id: id as never,
       tenantId: "berlin", orderId, customerId: "c-1", items: [],

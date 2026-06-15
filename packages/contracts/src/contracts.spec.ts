@@ -10,6 +10,7 @@ import {
   ORDER_SAGA_RESULTS,
   TOPICS,
   driverGeoKey,
+  tenantKey,
 } from "@flashbite/contracts";
 
 describe("contracts constants", () => {
@@ -54,6 +55,13 @@ describe("contracts constants", () => {
   it("exposes telemetry constants + geo key helper", () => {
     expect(EVENT_TYPES.DRIVER_TELEMETRY_STREAMED).toBe("DriverTelemetryStreamed");
     expect(CONSUMER_GROUPS.TELEMETRY).toBe("telemetry-worker");
-    expect(driverGeoKey("berlin")).toBe("{tenant:berlin}:drivers:geo");
+    expect(driverGeoKey("berlin")).toBe("tenant:{berlin}:drivers:geo");
+  });
+
+  it("builds tenant-scoped keys with the hash tag around only the id", () => {
+    // The {id} hash tag co-locates a tenant's keys; the colon stays outside the
+    // braces so key-tree viewers nest cleanly (tenant > {id} > ...).
+    expect(tenantKey("berlin")).toBe("tenant:{berlin}");
+    expect(tenantKey("tokyo", "order", "o-1", "view")).toBe("tenant:{tokyo}:order:o-1:view");
   });
 });

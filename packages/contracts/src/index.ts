@@ -40,10 +40,16 @@ export interface DriverTelemetryPayload {
   lat: number;
 }
 
-/** Per-tenant Redis geo key for live driver locations. The {tenant:id} hash tag
- *  co-locates the key on one cluster slot (GEO commands operate on a single key). */
+/** Builds a tenant-scoped Redis key. The `{id}` hash tag co-locates all of a tenant's
+ *  keys on one cluster slot; the leading `tenant:` keeps a readable, cleanly-nested
+ *  namespace (the brace wraps only the id, so key-tree viewers don't split on it). */
+export function tenantKey(tenantId: string, ...parts: string[]): string {
+  return [`tenant:{${tenantId}}`, ...parts].join(":");
+}
+
+/** Per-tenant Redis geo key for live driver locations (single-key GEO commands). */
 export function driverGeoKey(tenantId: string): string {
-  return `{tenant:${tenantId}}:drivers:geo`;
+  return tenantKey(tenantId, "drivers", "geo");
 }
 
 export interface OrderView {
