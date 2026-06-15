@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { Map, Marker, type MapRef } from "react-map-gl/mapbox";
+import { useEffect, useRef, useState } from "react";
+import { Map, Marker, Popup, type MapRef } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
-import type { GeoPoint, NearbyDriver } from "@flashbite/web-shared";
+import { formatKm, type GeoPoint, type NearbyDriver } from "@flashbite/web-shared";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+type MapPoint = NearbyDriver & { isSelf: boolean };
 
 export function NearbyMap({
   center,
@@ -12,10 +14,11 @@ export function NearbyMap({
   nearby,
 }: {
   center: GeoPoint;
-  self: GeoPoint | null;
+  self: NearbyDriver | null;
   nearby: NearbyDriver[];
 }) {
   const mapRef = useRef<MapRef>(null);
+  const [hovered, setHovered] = useState<MapPoint | null>(null);
 
   // Recenter the (uncontrolled) map as the anchor moves — the selected driver's
   // live position when it is streaming, otherwise the tenant city center.
@@ -34,6 +37,11 @@ export function NearbyMap({
     );
   }
 
+  const points: MapPoint[] = [
+    ...(self ? [{ ...self, isSelf: true }] : []),
+    ...nearby.map((d) => ({ ...d, isSelf: false })),
+  ];
+
   return (
     <div className="h-[360px] overflow-hidden rounded-xl border">
       <Map
@@ -43,10 +51,45 @@ export function NearbyMap({
         mapStyle="mapbox://styles/mapbox/streets-v12"
         style={{ width: "100%", height: "100%" }}
       >
-        {self && <Marker longitude={self.lng} latitude={self.lat} color="#06C167" />}
-        {nearby.map((d) => (
-          <Marker key={d.driverId} longitude={d.lng} latitude={d.lat} color="#0f172a" />
+        {points.map((p) => (
+          <Marker key={p.driverId} longitude={p.lng} latitude={p.lat} anchor="center">
+            <button
+              type="button"
+              aria-label={
+                p.isSelf
+                  ? `you (${p.driverId})`
+                  : `driver ${p.driverId}, ${formatKm(p.distanceKm)} away`
+              }
+              onMouseEnter={() => setHovered(p)}
+              onMouseLeave={() => setHovered((h) => (h?.driverId === p.driverId ? null : h))}
+              onFocus={() => setHovered(p)}
+              onBlur={() => setHovered(null)}
+              className="block h-3.5 w-3.5 cursor-pointer rounded-full border-2 border-white shadow"
+              style={{ backgroundColor: p.isSelf ? "#06C167" : "#0f172a" }}
+            />
+          </Marker>
         ))}
+
+        {hovered && (
+          <Popup
+            longitude={hovered.lng}
+            latitude={hovered.lat}
+            anchor="bottom"
+            offset={14}
+            closeButton={false}
+            closeOnClick={false}
+          >
+            <div className="text-xs">
+              <div className="font-semibold">
+                {hovered.isSelf ? `you (${hovered.driverId})` : hovered.driverId}
+              </div>
+              <div className="text-muted-foreground">
+                {hovered.isSelf ? "" : `${formatKm(hovered.distanceKm)} away · `}
+                {hovered.lng.toFixed(4)}, {hovered.lat.toFixed(4)}
+              </div>
+            </div>
+          </Popup>
+        )}
       </Map>
     </div>
   );

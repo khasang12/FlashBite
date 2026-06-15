@@ -34,7 +34,6 @@ export default function DriverPage() {
   const others = toNearbyRows(nearby, driverId);
   const center = CITY_CENTERS[tenant];
   const mapCenter = self ? { lng: self.lng, lat: self.lat } : center;
-  const selfPoint = self ? { lng: self.lng, lat: self.lat } : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,7 +106,7 @@ export default function DriverPage() {
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Nearby · 5km radius
               </div>
-              <NearbyMap center={mapCenter} self={selfPoint} nearby={others} />
+              <NearbyMap center={mapCenter} self={self} nearby={others} />
             </section>
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

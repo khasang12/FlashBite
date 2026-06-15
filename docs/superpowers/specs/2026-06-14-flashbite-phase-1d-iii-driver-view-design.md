@@ -95,11 +95,12 @@ auth/JWT (Phase 2).
   `getNearbyDrivers(tenant, CITY_CENTERS[tenant].lng/lat, 5)` and returns `{ nearby, reconnecting }`.
   Stops cleanly on toggle-off/unmount (active flag + clearTimeout); a transient query failure
   keeps the last results and flags `reconnecting`.
-- **`NearbyMap`** — a `react-map-gl` Mapbox map: props `{ center, self, nearby }`; always renders
-  (centered on `center`, recentering via `easeTo`), a green **you** marker only when `self` is
-  present, a dark marker per nearby driver. Token-gated graceful fallback (see Architecture).
-  Presentational only (no data fetching). Excluded from unit tests (WebGL can't render in jsdom);
-  covered by e2e + manual.
+- **`NearbyMap`** — a `react-map-gl` Mapbox map: props `{ center, self: NearbyDriver | null,
+  nearby }`; always renders (centered on `center`, recentering via `easeTo`), a green **you**
+  marker when `self` is present and a dark marker per nearby driver. Each marker shows driver
+  detail (id, distance, coords) in a `Popup` on hover and on keyboard focus. Token-gated graceful
+  fallback (see Architecture). Presentational only (no data fetching). Excluded from unit tests
+  (WebGL can't render in jsdom); covered by e2e + manual.
 - **`NearbyTable`** — the shared `DataTable` with columns `driverId` and `distanceKm` (km, 2dp),
   default-sorted ascending by distance, `emptyMessage="No nearby drivers."`. Receives `others`.
 - Driver id: a small set of demo ids (`drv-1`..`drv-4`) selectable, default `drv-1`; tenant via a
