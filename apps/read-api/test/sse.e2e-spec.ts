@@ -4,19 +4,28 @@ import { Test } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import { AppModule } from "../src/app.module";
 import { OrderStreamService } from "../src/sse/order-stream.service";
+import { TokenVerifier } from "@flashbite/tenant-context";
+import { createTestAuth, type TestAuth } from "@flashbite/tenant-context/testing";
 
 describe("read-api merchant SSE (e2e)", () => {
   let app: INestApplication;
   let stream: OrderStreamService;
   let port: number;
+  let auth: TestAuth;
+  let berlinToken: string;
 
   beforeAll(async () => {
-    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    auth = await createTestAuth();
+    const mod = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(TokenVerifier)
+      .useValue(auth.verifier)
+      .compile();
     app = mod.createNestApplication();
     await app.init();
     await app.listen(0);
     port = (app.getHttpServer().address() as { port: number }).port;
     stream = app.get(OrderStreamService);
+    berlinToken = await auth.mint({ tenantId: "berlin", role: "merchant", sub: "m-1" });
   });
   afterAll(async () => { await app.close(); });
 
@@ -29,7 +38,12 @@ describe("read-api merchant SSE (e2e)", () => {
         else resolve(result);
       };
       const req = http.get(
-        { host: "127.0.0.1", port, path: "/merchant/orders/stream", headers: { "X-Tenant-ID": "berlin" } },
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/merchant/orders/stream",
+          headers: { "Authorization": `Bearer ${berlinToken}` },
+        },
         (res) => {
           res.setEncoding("utf8");
           let buf = "";
