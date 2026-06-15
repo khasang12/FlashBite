@@ -166,6 +166,8 @@ terminal (or background them):
 
 ```bash
 pnpm infra:up          # Postgres, Mongo, Redpanda, Temporal, Redis Cluster
+pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
+pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword
 
 # order plane
 pnpm dev:write-api     # :3001  place orders, relay merchant accept/decline
