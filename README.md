@@ -37,7 +37,7 @@ driver GPS pings
 telemetry-streams (Kafka)
    │
    ▼
-telemetry-worker ──► Redis Cluster geo  (GEOADD into {tenant:id}:drivers:geo)
+telemetry-worker ──► Redis Cluster geo  (GEOADD into tenant:{id}:drivers:geo)
                               ▲
    GET /drivers/nearby ───────┘  read-api (GEOSEARCH, per-tenant)
 ```
@@ -51,7 +51,7 @@ telemetry-worker ──► Redis Cluster geo  (GEOADD into {tenant:id}:drivers:g
 - **Temporal sagas** — per-tenant SLA timers raced against merchant-approval signals,
   with compensation (refund + tenant-branded cancellation) on breach.
 - **Polyglot persistence** — Postgres (write), Mongo (read models), Redis Cluster
-  (cache + geo, `{tenant:id}` hash-tag co-location).
+  (cache + geo, `tenant:{id}` hash-tag co-location).
 - **Real-time telemetry** — ephemeral driver GPS streamed (`DriverTelemetryStreamed` on
   `telemetry-streams`) into per-tenant Redis geospatial indices and served via `GEOSEARCH`
   (`GET /drivers/nearby`); high-velocity, tenant-isolated, never persisted to Postgres.
@@ -153,6 +153,6 @@ curl "localhost:3002/drivers/nearby?lng=13.405&lat=52.52&radiusKm=5" \
 ```
 
 Telemetry is **ephemeral** — Redis geospatial only, never Postgres / the event store.
-Per-tenant isolation holds on both write and read (`{tenant:id}:drivers:geo`). Manual
+Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`). Manual
 requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
 [`docs/superpowers/plans/phase-1c-ii-verification.md`](docs/superpowers/plans/phase-1c-ii-verification.md).

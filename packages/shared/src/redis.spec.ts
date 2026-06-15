@@ -7,7 +7,7 @@ describe("createRedisCluster", () => {
     const info = await cluster.cluster("INFO");
     expect(String(info)).toContain("cluster_state:ok");
 
-    const key = `{tenant:berlin}:probe:${randomUUID()}`;
+    const key = `tenant:{berlin}:probe:${randomUUID()}`;
     await cluster.set(key, "v1", "EX", 10);
     const back = await cluster.get(key);
     expect(back).toBe("v1");

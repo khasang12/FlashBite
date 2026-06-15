@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { MongoService, RedisService } from "@flashbite/shared";
 import { getTenantId } from "@flashbite/tenant-context";
-import { READ_COLLECTIONS, type OrderView } from "@flashbite/contracts";
+import { READ_COLLECTIONS, tenantKey, type OrderView } from "@flashbite/contracts";
 
 const CACHE_TTL_SECONDS = 10;
 
@@ -14,7 +14,7 @@ export class OrdersQueryService {
 
   async getOrder(orderId: string): Promise<OrderView | null> {
     const tenantId = getTenantId();
-    const cacheKey = `{tenant:${tenantId}}:order:${orderId}:view`;
+    const cacheKey = tenantKey(tenantId, "order", orderId, "view");
 
     const cached = await this.redis.cluster.get(cacheKey);
     if (cached) return JSON.parse(cached) as OrderView;
