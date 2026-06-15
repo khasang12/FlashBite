@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "dependencies": {
     "@flashbite/shared": "workspace:*",
-    "@nestjs/common": "10.4.4"
+    "@nestjs/common": "10.4.4",
+    "jose": "5.9.6"
   },
   "devDependencies": {
     "@types/express": "4.17.21"
