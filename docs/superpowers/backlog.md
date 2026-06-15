@@ -137,3 +137,20 @@ unauthenticated `/admin/*` route that ignores tenant isolation would be a securi
    a fallback / move server-side.
 
 Phase 1d-iv ships the client-fan-out admin grid; this entry is the deferred authenticated API.
+
+## Identity hardening — refresh tokens, key rotation, user management (post Phase 2a)
+
+**Goal:** Round out the identity service (Phase 2a ships the minimal core: RS256 login + JWKS +
+seeded users, access-token-only, startup-generated keys). Deferred hardening:
+
+1. **Refresh tokens** — `POST /auth/refresh` with rotating refresh tokens (stored + revocable),
+   so access tokens can stay short while sessions persist; the frontends (2d) do silent refresh
+   instead of forcing re-login on expiry.
+2. **Key persistence + rotation** — persist the RS256 keypair in a secret store (not regenerated
+   on restart, so tokens survive restarts) and rotate via overlapping `kid`s published in JWKS.
+3. **User management** — self-signup, password reset, and an admin user-management surface;
+   email verification. Phase 2a only seeds demo users.
+4. **Revocation / logout** — a token blocklist or short-TTL + refresh-revoke so logout is real.
+
+These are intentionally out of Phase 2a to keep the slice focused on the cryptographic-identity
+core (issue a verifiable token; publish public keys); they layer on without changing that core.
