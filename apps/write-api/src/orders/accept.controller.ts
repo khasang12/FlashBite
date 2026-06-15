@@ -1,5 +1,5 @@
 import { Controller, HttpCode, NotFoundException, Param, Post } from "@nestjs/common";
-import { getTenantId } from "@flashbite/tenant-context";
+import { getTenantId, Roles } from "@flashbite/tenant-context";
 import { ORDER_SAGA } from "@flashbite/contracts";
 import { TemporalService } from "../temporal/temporal.service";
 
@@ -9,12 +9,14 @@ export class AcceptController {
 
   @Post(":orderId/accept")
   @HttpCode(202)
+  @Roles("merchant")
   async accept(@Param("orderId") orderId: string): Promise<{ orderId: string; signalled: string }> {
     return this.signal(orderId, true);
   }
 
   @Post(":orderId/decline")
   @HttpCode(202)
+  @Roles("merchant")
   async decline(@Param("orderId") orderId: string): Promise<{ orderId: string; signalled: string }> {
     return this.signal(orderId, false);
   }

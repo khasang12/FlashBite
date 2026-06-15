@@ -17,11 +17,9 @@ describe("write-api health (e2e)", () => {
     await app.close();
   });
 
-  it("GET /health returns ok with the resolved tenant", async () => {
-    const res = await request(app.getHttpServer())
-      .get("/health")
-      .set("X-Tenant-ID", "berlin");
+  it("GET /health returns ok without a token (excluded from auth)", async () => {
+    const res = await request(app.getHttpServer()).get("/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", tenantId: "berlin" });
+    expect(res.body).toEqual({ status: "ok" });
   });
 });

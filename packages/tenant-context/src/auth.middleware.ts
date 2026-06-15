@@ -16,13 +16,15 @@ export class AuthMiddleware implements NestMiddleware {
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
     if (!token) {
-      throw new UnauthorizedException("Missing bearer token");
+      next(new UnauthorizedException("Missing bearer token"));
+      return;
     }
     let ctx;
     try {
       ctx = await this.verifier.verify(token);
     } catch {
-      throw new UnauthorizedException("Invalid token");
+      next(new UnauthorizedException("Invalid token"));
+      return;
     }
     runWithAuth(ctx, () => next());
   }
