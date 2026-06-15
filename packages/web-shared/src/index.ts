@@ -53,7 +53,7 @@ export {
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
 export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
 export { useCartStore, type CartLine } from "./store/cart-store";
-export { randomWalk, type GeoPoint } from "./geo/random-walk";
+export { type GeoPoint } from "./geo/types";
 export { CITY_CENTERS, type CityCenter } from "./geo/city-centers";
 export { toNearbyRows, formatKm } from "./geo/nearby";
 export { getMenu, getPopular, type MenuItem } from "./menu/seed";

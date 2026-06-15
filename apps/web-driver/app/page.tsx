@@ -2,11 +2,11 @@
 import { useEffect, useState } from "react";
 import {
   useTenantStore, TENANTS, type Tenant,
-  toNearbyRows,
+  CITY_CENTERS, toNearbyRows,
   Button,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@flashbite/web-shared";
-import { useGpsEmitter } from "@/hooks/use-gps-emitter";
+import { useNearbyWatch } from "@/hooks/use-nearby-watch";
 import { NearbyMap } from "@/components/nearby-map";
 import { NearbyTable } from "@/components/nearby-table";
 
@@ -17,7 +17,7 @@ export default function DriverPage() {
   const setTenant = useTenantStore((s) => s.setTenant);
   const [mounted, setMounted] = useState(false);
   const [driverId, setDriverId] = useState("drv-1");
-  const [online, setOnline] = useState(false);
+  const [watching, setWatching] = useState(false);
 
   useEffect(() => {
     // Hydration-safe mount flag: the tenant store uses skipHydration, so the tenant
@@ -27,8 +27,14 @@ export default function DriverPage() {
     setMounted(true);
   }, []);
 
-  const { position, nearby, pings, reconnecting } = useGpsEmitter(tenant, driverId, online);
-  const rows = toNearbyRows(nearby, driverId);
+  const { nearby, reconnecting } = useNearbyWatch(tenant, watching);
+  // GPS is streamed externally (scripts/stream-gps.sh). The selected driver shows
+  // as "you" when its ping appears in the geo index; everyone else is in the table.
+  const self = nearby.find((d) => d.driverId === driverId) ?? null;
+  const others = toNearbyRows(nearby, driverId);
+  const center = CITY_CENTERS[tenant];
+  const mapCenter = self ? { lng: self.lng, lat: self.lat } : center;
+  const selfPoint = self ? { lng: self.lng, lat: self.lat } : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,46 +70,50 @@ export default function DriverPage() {
 
       <main className="mx-auto max-w-5xl px-6 py-6">
         <div className="mb-6 flex items-center justify-between rounded-xl border px-5 py-4">
-          {online ? (
+          {watching ? (
             <div className="flex items-center gap-3">
               <span className="relative inline-flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
               </span>
               <div>
-                <div className="font-bold">Online — streaming GPS</div>
+                <div className="font-bold">Watching — live nearby</div>
                 <div className="text-xs text-muted-foreground">
-                  {driverId} · {pings} pings sent
-                  {position ? ` · ${position.lng.toFixed(4)}, ${position.lat.toFixed(4)}` : ""}
+                  {tenant} · {others.length} nearby
+                  {self
+                    ? ` · you (${driverId}): ${self.lng.toFixed(4)}, ${self.lat.toFixed(4)}`
+                    : ` · ${driverId} not streaming yet`}
                   {reconnecting ? " · reconnecting…" : ""}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">Offline — go online to start streaming your location.</div>
+            <div className="text-sm text-muted-foreground">
+              Not watching — start to see nearby drivers (stream GPS via scripts/stream-gps.sh).
+            </div>
           )}
           <Button
-            variant={online ? "secondary" : "default"}
-            onClick={() => setOnline((v) => !v)}
-            aria-pressed={online}
+            variant={watching ? "secondary" : "default"}
+            onClick={() => setWatching((v) => !v)}
+            aria-pressed={watching}
           >
-            {online ? "Go offline" : "Go online"}
+            {watching ? "Stop watching" : "Start watching"}
           </Button>
         </div>
 
-        {online && (
+        {watching && (
           <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Nearby · 5km radius
               </div>
-              <NearbyMap position={position} nearby={rows} />
+              <NearbyMap center={mapCenter} self={selfPoint} nearby={others} />
             </section>
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Nearby drivers ({rows.length})
+                Nearby drivers ({others.length})
               </div>
-              <NearbyTable data={rows} />
+              <NearbyTable data={others} />
             </section>
           </div>
         )}

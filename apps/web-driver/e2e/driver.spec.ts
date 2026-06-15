@@ -1,31 +1,31 @@
 import { test, expect } from "@playwright/test";
 
-test("offline by default — no nearby section until online", async ({ page }) => {
+test("not watching by default — no nearby section until started", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByText("Offline — go online to start streaming your location."),
+    page.getByText("Not watching — start to see nearby drivers (stream GPS via scripts/stream-gps.sh)."),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /go online/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /start watching/i })).toBeVisible();
   await expect(page.getByText(/nearby · 5km radius/i)).toHaveCount(0);
 });
 
-test("going online streams a location ping (202) and shows the nearby section", async ({ page }) => {
+test("starting watch queries nearby (200) and shows the nearby section", async ({ page }) => {
   await page.goto("/");
 
-  const ping = page.waitForResponse(
+  const nearbyReq = page.waitForResponse(
     (r) =>
-      /\/api\/read\/drivers\/.+\/location$/.test(r.url()) &&
-      r.request().method() === "POST" &&
-      r.status() === 202,
+      /\/api\/read\/drivers\/nearby\?/.test(r.url()) &&
+      r.request().method() === "GET" &&
+      r.status() === 200,
     { timeout: 30_000 },
   );
 
-  await page.getByRole("button", { name: /go online/i }).click();
+  await page.getByRole("button", { name: /start watching/i }).click();
 
-  const res = await ping;
-  expect(res.status()).toBe(202);
+  const res = await nearbyReq;
+  expect(res.status()).toBe(200);
 
-  await expect(page.getByText("Online — streaming GPS")).toBeVisible();
+  await expect(page.getByText("Watching — live nearby")).toBeVisible();
   await expect(page.getByText(/nearby · 5km radius/i)).toBeVisible();
   // Nearby readout renders (table or its empty state) once a refresh completes.
   await expect(page.getByText(/nearby drivers \(/i)).toBeVisible();
