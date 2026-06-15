@@ -6,6 +6,7 @@ import {
   READ_COLLECTIONS,
   type EventEnvelope,
   type OrderPlacedPayload,
+  type OrderView,
 } from "@flashbite/contracts";
 
 export const CONSUMER_NAME = CONSUMERS.PROJECTION;
@@ -51,14 +52,14 @@ export async function applyEvent(db: Db, envelope: EventEnvelope): Promise<"appl
     envelope.eventType === EVENT_TYPES.ORDER_ACCEPTED ||
     envelope.eventType === EVENT_TYPES.ORDER_CANCELLED
   ) {
-    const status =
-      envelope.eventType === EVENT_TYPES.ORDER_ACCEPTED ? ORDER_STATUS.ACCEPTED : ORDER_STATUS.CANCELLED;
+    const isCancel = envelope.eventType === EVENT_TYPES.ORDER_CANCELLED;
+    const status = isCancel ? ORDER_STATUS.CANCELLED : ORDER_STATUS.ACCEPTED;
     const existing = await orders.findOne({ _id: _id as never });
     if (existing && (existing.version as number) < envelope.version) {
-      await orders.updateOne(
-        { _id: _id as never },
-        { $set: { status, version: envelope.version, updatedAt: envelope.occurredAt } },
-      );
+      const set: Partial<OrderView> = { status, version: envelope.version, updatedAt: envelope.occurredAt };
+      const reason = (envelope.payload as { reason?: string }).reason;
+      if (isCancel && reason !== undefined) set.cancelReason = reason;
+      await orders.updateOne({ _id: _id as never }, { $set: set });
     }
   }
   // Unknown event types fall through and are still marked processed (forward-compatible).
