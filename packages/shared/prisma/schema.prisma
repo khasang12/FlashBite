@@ -45,3 +45,15 @@ model ProcessedEvent {
   @@id([tenantId, consumer, eventId])
   @@map("processed_events")
 }
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("users")
+}

@@ -27,3 +27,21 @@ describe("loadConfig", () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
   });
 });
+
+describe("loadConfig JWT settings", () => {
+  const base = { DATABASE_URL: "postgres://x" };
+
+  it("defaults issuer/audience/ttl", () => {
+    const c = loadConfig({ ...base });
+    expect(c.jwtIssuer).toBe("flashbite-identity");
+    expect(c.jwtAudience).toBe("flashbite");
+    expect(c.jwtAccessTtl).toBe(3600);
+  });
+
+  it("reads overrides from env", () => {
+    const c = loadConfig({ ...base, JWT_ISSUER: "iss", JWT_AUDIENCE: "aud", JWT_ACCESS_TTL: "900" });
+    expect(c.jwtIssuer).toBe("iss");
+    expect(c.jwtAudience).toBe("aud");
+    expect(c.jwtAccessTtl).toBe(900);
+  });
+});

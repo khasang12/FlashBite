@@ -8,17 +8,86 @@
 #   pnpm dev:projection    # order-events -> MongoDB read model
 #   pnpm dev:read-api      # http://localhost:3002 (query side: orders + SSE + drivers)
 #   pnpm dev:telemetry     # telemetry-streams -> Redis geo (driver locations)
+#   pnpm dev:identity      # http://localhost:3003 (Phase 2a: login + JWKS)
+#   pnpm seed:users        # seed demo users (role@tenant.test, e.g. merchant@berlin.test)
 #
 # Note on random ids: {{$guid}} is the VS Code REST Client generator.
 # In JetBrains HTTP Client use {{$random.uuid}} instead.
 
 @baseUrl = http://localhost:3001
 @readUrl = http://localhost:3002
+@identityUrl = http://localhost:3003
+@seedPassword = devpassword
 @tenant = berlin
 # Fixed id so the "place" + "re-place" pair below exercises idempotency.
 @orderId = 31111111-1111-1111-1111-111111111112
 # Fixed driver id so the location POST + nearby query below correlate.
 @driverId = drv-1
+
+# ============================================================================
+# Phase 2a — identity service (port 3003). Unauthenticated issuer of RS256 JWTs.
+# Prereqs: pnpm dev:identity  +  pnpm seed:users  (seeds role@tenant.test users).
+# Login resolves tenant + role from the user row — NOT from a header.
+# (Nothing verifies these tokens yet; that lands in slice 2b.)
+# ============================================================================
+
+### Identity health. Expect 200 { "status": "ok" }.
+GET {{identityUrl}}/health
+
+### Log in as a seeded merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 3600 }.
+### The JWT carries sub + tenantId=berlin + role=merchant (decode at jwt.io to inspect).
+# @name login
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "merchant@berlin.test",
+  "password": "{{seedPassword}}"
+}
+
+### JWKS — the public keys used to verify the token above. Expect 200 { "keys": [ ... ] }
+### (public material only — no d/p/q). `kid` matches the token header's `kid`.
+GET {{identityUrl}}/.well-known/jwks.json
+
+### Bearer-header shape using the captured token. No protected endpoint exists in 2a —
+### this just shows what slice 2b's write-api/read-api will expect. Still returns 200 (health is open).
+GET {{identityUrl}}/health
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### Log in as the tokyo admin — different tenantId + role in the token. Expect 201.
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@tokyo.test",
+  "password": "{{seedPassword}}"
+}
+
+### Wrong password. Expect 401 { "message": "Invalid email or password" }.
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "merchant@berlin.test",
+  "password": "wrong"
+}
+
+### Unknown email. Expect 401 — SAME generic message (no user enumeration).
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nobody@berlin.test",
+  "password": "{{seedPassword}}"
+}
+
+### Malformed body (not an email, no password). Expect 400 Bad Request (ValidationPipe).
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "not-an-email"
+}
 
 ### Health — resolves tenant from the X-Tenant-ID header
 GET {{baseUrl}}/health
