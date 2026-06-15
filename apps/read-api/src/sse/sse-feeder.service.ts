@@ -3,6 +3,7 @@ import { Kafka, logLevel, type Consumer } from "kafkajs";
 import { loadConfig } from "@flashbite/shared";
 import {
   CONSUMER_GROUPS,
+  EVENT_TYPES,
   ORDER_STATUS,
   TOPICS,
   type EventEnvelope,
@@ -12,8 +13,9 @@ import { OrderStreamService } from "./order-stream.service";
 
 /** Maps an order-events envelope to the merchant SSE event shape. */
 export function toStreamEvent(envelope: EventEnvelope) {
-  const p = envelope.payload as Partial<OrderPlacedPayload>;
-  return { orderId: p.orderId ?? "", eventType: envelope.eventType, status: ORDER_STATUS.PLACED };
+  const p = envelope.payload as Partial<OrderPlacedPayload> & { reason?: string };
+  const cancelReason = envelope.eventType === EVENT_TYPES.ORDER_CANCELLED ? p.reason : undefined;
+  return { orderId: p.orderId ?? "", eventType: envelope.eventType, status: ORDER_STATUS.PLACED, cancelReason };
 }
 
 @Injectable()
