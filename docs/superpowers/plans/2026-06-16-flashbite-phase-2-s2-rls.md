@@ -291,7 +291,7 @@ Edit `apps/saga-worker/src/main.ts` — change `const prisma = new PrismaClient(
 
 ```ts
   const config = loadConfig();
-  const prisma = new PrismaClient({ datasources: { db: { url: config.appDatabaseUrl } } });
+  const prisma = new PrismaClient({ datasourceUrl: config.appDatabaseUrl });
   await prisma.$connect();
 ```
 
@@ -357,7 +357,7 @@ import { loadConfig } from "@flashbite/shared";
 // so each isolation assertion runs inside its own interactive transaction.
 describe("RLS tenant isolation (event_store/outbox)", () => {
   const cfg = loadConfig();
-  const app = new PrismaClient({ datasources: { db: { url: cfg.appDatabaseUrl } } });
+  const app = new PrismaClient({ datasourceUrl: cfg.appDatabaseUrl });
   const owner = new PrismaClient(); // DATABASE_URL — superuser, bypasses RLS
 
   beforeAll(async () => {
