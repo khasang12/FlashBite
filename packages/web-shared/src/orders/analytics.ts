@@ -33,7 +33,7 @@ export interface SkuCount { sku: string; qty: number; }
 export function topSkus(orders: OrderView[], limit = 5): SkuCount[] {
   const totals = new Map<string, number>();
   for (const o of orders.filter(live)) {
-    for (const it of o.items) totals.set(it.sku, (totals.get(it.sku) ?? 0) + it.qty);
+    for (const it of o.items ?? []) totals.set(it.sku, (totals.get(it.sku) ?? 0) + it.qty);
   }
   return [...totals.entries()]
     .map(([sku, qty]) => ({ sku, qty }))

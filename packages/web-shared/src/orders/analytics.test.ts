@@ -42,6 +42,14 @@ describe("analytics", () => {
   it("orderCounts reports total, cancelled, rate", () => {
     expect(orderCounts(orders)).toEqual({ total: 4, cancelled: 1, cancelRate: 0.25 });
   });
+  it("topSkus tolerates orders with missing items (no crash)", () => {
+    const withNull = [
+      o({ tenantId: "berlin", status: "ACCEPTED", items: undefined as never }),
+      o({ tenantId: "berlin", status: "ACCEPTED", items: [{ sku: "pizza", qty: 2, price: 500 }] }),
+    ];
+    expect(() => topSkus(withNull)).not.toThrow();
+    expect(topSkus(withNull)).toEqual([{ sku: "pizza", qty: 2 }]);
+  });
   it("replaceTenantOrders swaps one tenant's slice, keeping others", () => {
     const next = replaceTenantOrders(orders, "berlin", [o({ tenantId: "berlin", orderId: "new" })]);
     expect(next.filter((x) => x.tenantId === "berlin").map((x) => x.orderId)).toEqual(["new"]);
