@@ -18,10 +18,12 @@
     "dev:web-customer": "pnpm --filter web-customer dev",
     "dev:web-merchant": "pnpm --filter web-merchant dev",
     "dev:web-driver": "pnpm --filter web-driver dev",
+    "dev:web-admin": "pnpm --filter web-admin dev",
     "test:web": "pnpm --filter @flashbite/web-shared test",
     "test:e2e:web": "pnpm --filter web-customer test:e2e",
     "test:e2e:merchant": "pnpm --filter web-merchant test:e2e",
-    "test:e2e:driver": "pnpm --filter web-driver test:e2e"
+    "test:e2e:driver": "pnpm --filter web-driver test:e2e",
+    "test:e2e:admin": "pnpm --filter web-admin test:e2e"
   },
   "devDependencies": {
     "@swc-node/register": "^1.11.1",

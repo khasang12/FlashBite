@@ -61,6 +61,7 @@ export interface OrderView {
   status: string;
   version: number;
   updatedAt: string;
+  cancelReason?: string;
 }
 
 // ---- Event sourcing ----

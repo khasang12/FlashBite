@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { connectMongo, MongoHandle, buildEnvelope } from "@flashbite/shared";
 import {
   EVENT_TYPES,
+  ORDER_CANCEL_REASONS,
   READ_COLLECTIONS,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
@@ -93,6 +94,7 @@ describe("applyEvent", () => {
 
     const doc = await mongo.db.collection(READ_COLLECTIONS.ORDERS).findOne({ _id: `berlin:${orderId}` as never });
     expect(doc?.status).toBe("ACCEPTED");
+    expect(doc?.cancelReason).toBeUndefined();
     expect(doc?.version).toBe(2);
 
     await mongo.db.collection(READ_COLLECTIONS.ORDERS).deleteOne({ _id: `berlin:${orderId}` as never });
@@ -107,13 +109,14 @@ describe("applyEvent", () => {
       tenantId: "berlin",
       eventType: EVENT_TYPES.ORDER_CANCELLED,
       version: 2,
-      payload: { orderId, reason: "SLA_BREACH" },
+      payload: { orderId, reason: ORDER_CANCEL_REASONS.SLA_BREACH },
     });
     await applyEvent(mongo.db, cancelled);
 
     const doc = await mongo.db.collection(READ_COLLECTIONS.ORDERS).findOne({ _id: `berlin:${orderId}` as never });
     expect(doc?.status).toBe("CANCELLED");
     expect(doc?.version).toBe(2);
+    expect(doc?.cancelReason).toBe(ORDER_CANCEL_REASONS.SLA_BREACH);
 
     await mongo.db.collection(READ_COLLECTIONS.ORDERS).deleteOne({ _id: `berlin:${orderId}` as never });
     await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteMany({ _id: { $in: [`berlin:projection-worker:${place.eventId}`, `berlin:projection-worker:${cancelled.eventId}`] } } as never);

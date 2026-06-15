@@ -41,3 +41,22 @@ describe("order-events", () => {
     expect(next).toBe(rows);
   });
 });
+
+const row = (over: Partial<OrderView> = {}): OrderView => ({
+  tenantId: "berlin", orderId: "o-1", customerId: "c", items: [], totalAmount: 100,
+  status: "PLACED", version: 1, updatedAt: "t", ...over,
+});
+
+describe("applyOrderEvent cancelReason", () => {
+  it("sets status + cancelReason on a known order when the event carries a reason", () => {
+    const out = applyOrderEvent([row()], { orderId: "o-1", eventType: "OrderCancelled", cancelReason: "SLA_BREACH" });
+    expect(out[0].status).toBe("CANCELLED");
+    expect(out[0].cancelReason).toBe("SLA_BREACH");
+  });
+
+  it("leaves cancelReason unset for non-cancel events", () => {
+    const out = applyOrderEvent([row()], { orderId: "o-1", eventType: "OrderAccepted" });
+    expect(out[0].status).toBe("ACCEPTED");
+    expect(out[0].cancelReason).toBeUndefined();
+  });
+});

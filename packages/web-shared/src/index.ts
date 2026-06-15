@@ -51,6 +51,10 @@ export {
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody,
 } from "./api/client";
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
+export {
+  aggregateGmv, gmvByTenant, statusBreakdown, topSkus, gmvOverTime, orderCounts, replaceTenantOrders,
+  type TenantGmv, type TenantStatusCounts, type SkuCount, type GmvBucket, type OrderCounts,
+} from "./orders/analytics";
 export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
 export { useCartStore, type CartLine } from "./store/cart-store";
 export { type GeoPoint } from "./geo/types";

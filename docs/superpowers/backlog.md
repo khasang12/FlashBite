@@ -113,3 +113,27 @@ merchant → driver).
 
 `packages/web-shared` already gives a shared design system + API client, so most of the
 de-duplication value is captured; this entry is about navigation/routing/deploy composition.
+
+## Admin API — authenticated cross-tenant read model (backend phase)
+
+**Goal:** Serve the admin/operator grid (Phase 1d-iv) from a single cross-tenant API instead of
+client-side fan-out. The admin currently loops `TENANTS` and calls the per-tenant endpoints once
+each (orders + nearby + SSE) and aggregates in the browser — fine for 2 tenants, but it does N×
+requests / N SSE connections and can't paginate or aggregate server-side.
+
+**Why it's its own phase (not a frontend slice):** read-api is deliberately tenant-scoped
+(`getTenantId()` on every route). A cross-tenant endpoint must **bypass** that — which is only
+safe behind real authorization. So this is blocked on **Phase 2 JWT auth + an operator role**; an
+unauthenticated `/admin/*` route that ignores tenant isolation would be a security regression.
+
+**Rough shape (once auth lands):**
+1. An `admin` role/claim in the verified JWT; a guard that admits only operators.
+2. `GET /admin/orders` (cross-tenant, paginated, filterable), `GET /admin/drivers` (all tenants'
+   geo), and a single `GET /admin/orders/stream` SSE multiplexing every tenant.
+3. Server-side aggregation (GMV, status breakdown, top SKUs, time series) so the client stops
+   recomputing — pairs naturally with the "telemetry-archiver / orders history store" entry for
+   full-history analytics beyond the live ≤100-orders window.
+4. Then swap the web-admin fan-out for the single API; the web-shared aggregation helpers become
+   a fallback / move server-side.
+
+Phase 1d-iv ships the client-fan-out admin grid; this entry is the deferred authenticated API.

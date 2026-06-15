@@ -11,75 +11,102 @@ backend pattern, with a second tenant present purely to prove isolation.
 
 ## What it demonstrates
 
-A single order flows through **every box** in the architecture:
+A single order flows through **every box** in the architecture (CQRS: an event-sourced write
+plane and a projected read plane, joined by Kafka):
 
-```
-NextJS storefront
-   │  place order (verified JWT → tenant context)
-   ▼
-write-api ──(atomic tx)──► Postgres event store + outbox
-   │                                   │
-   │                          outbox-poller
-   │                                   ▼
-   │                         Redpanda (Kafka, Avro)
-   │                          ╱                ╲
-   ▼                  projection-worker     saga-worker (Temporal)
-read-api ◄── Redis Cluster ◄── Mongo        SLA timer ⇄ merchant signal
-(SSE)                                        compensation on breach
+```mermaid
+flowchart LR
+  FE["Frontends :3100-3103<br/>customer / merchant / driver / admin"]
+  W["write-api :3001"]
+  R["read-api :3002"]
+  PG[("Postgres<br/>event store + outbox")]
+  OB["outbox-poller"]
+  KF["Redpanda - Kafka"]
+  PJ["projection-worker"]
+  SG["saga-worker - Temporal"]
+  MG[("MongoDB read model")]
+  RS[("Redis Cluster<br/>cache + geo")]
+
+  FE -->|"place / accept"| W
+  FE -->|"query + SSE"| R
+  W --> PG --> OB --> KF
+  KF --> PJ --> MG
+  KF --> SG
+  SG -->|"append accept / cancel"| PG
+  W -->|"merchant signal"| SG
+  R --> MG
+  R --> RS
 ```
 
 Plus a real-time **telemetry plane** (ephemeral — Redis geo only, never persisted):
 
-```
-driver GPS pings
-   │  POST /drivers/:id/location  →  read-api
-   ▼
-telemetry-streams (Kafka)
-   │
-   ▼
-telemetry-worker ──► Redis Cluster geo  (GEOADD into tenant:{id}:drivers:geo)
-                              ▲
-   GET /drivers/nearby ───────┘  read-api (GEOSEARCH, per-tenant)
+```mermaid
+flowchart LR
+  GPS["driver GPS pings<br/>scripts/stream-gps.sh"]
+  R["read-api :3002"]
+  KF["Kafka telemetry-streams"]
+  TM["telemetry-worker"]
+  RS[("Redis Cluster geo")]
+  Q["web-driver / web-admin"]
+
+  GPS -->|"POST /drivers/:id/location"| R
+  R --> KF --> TM
+  TM -->|"GEOADD tenant:{id}:drivers:geo"| RS
+  Q -->|"GET /drivers/nearby"| R
+  R -->|"GEOSEARCH per-tenant"| RS
 ```
 
-- **Multi-tenancy** — Postgres Row-Level Security, subdomain routing, `tenantId`
-  propagated through every tier from a verified JWT (never a spoofable header).
-- **CQRS + Event Sourcing + Transactional Outbox** — atomic write of event + outbox row,
-  forward-only and rebuildable projections.
-- **Kafka (via Redpanda) + Schema Registry** — Avro envelopes, per-order partition keys
-  (`tenantId:orderId`) for ordering.
-- **Temporal sagas** — per-tenant SLA timers raced against merchant-approval signals,
-  with compensation (refund + tenant-branded cancellation) on breach.
-- **Polyglot persistence** — Postgres (write), Mongo (read models), Redis Cluster
+> **Full architecture (components, sequence diagrams, data model):**
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+**Built today (Phase 0 + 1):**
+
+- **CQRS + Event Sourcing + Transactional Outbox** — order events + outbox row committed in one
+  Postgres transaction (Prisma); forward-only, rebuildable Mongo projections.
+- **Kafka (via Redpanda)** — JSON envelopes, per-order partition keys (`tenantId:orderId`) for
+  ordering. *(Avro + Schema Registry: planned, Phase 3.)*
+- **Temporal sagas** — one workflow per order: charge → per-tenant SLA timer raced against the
+  merchant-approval signal → accept, or compensate (refund + cancellation with a reason). Payment
+  is a fake activity for now.
+- **Polyglot persistence** — Postgres (event store), Mongo (read models + inbox), Redis Cluster
   (cache + geo, `tenant:{id}` hash-tag co-location).
-- **Real-time telemetry** — ephemeral driver GPS streamed (`DriverTelemetryStreamed` on
-  `telemetry-streams`) into per-tenant Redis geospatial indices and served via `GEOSEARCH`
-  (`GET /drivers/nearby`); high-velocity, tenant-isolated, never persisted to Postgres.
-- **Idempotency & dedup** — first-class at every hop (inbox pattern, stable `eventId`,
-  Temporal `WorkflowId` reuse policy).
-- **Dedicated identity service** — issues signed JWTs so tenant isolation rests on
-  cryptographic identity, not trust.
+- **Real-time telemetry** — ephemeral driver GPS (`DriverTelemetryStreamed` on `telemetry-streams`)
+  into per-tenant Redis geo indices, served via `GEOSEARCH` (`GET /drivers/nearby`); never
+  persisted.
+- **Idempotency & dedup** — at every hop: stable `eventId`, Mongo inbox pattern, Temporal
+  `WorkflowId = tenantId:orderId` reject-duplicate reuse policy.
+- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin (cross-tenant
+  analytics), on a shared design system.
+- **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
+  tags). Resolution is the `X-Tenant-ID` header today.
 
-See the full design in
+**Planned (later phases):** a dedicated **identity service + verified JWT** and **Postgres
+Row-Level Security** (Phase 2) replace the trusted header; **Avro + Schema Registry**, a real
+payment provider, and **driver dispatch** come later. See `docs/superpowers/backlog.md`.
+
+See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
+vision in
 [`docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md`](docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md).
 
 ---
 
 ## Tech stack
 
-NestJS · NextJS · Kafka (Redpanda) + Schema Registry · Temporal · PostgreSQL + Prisma ·
-MongoDB · Redis Cluster · TypeScript · pnpm monorepo · Docker Compose.
+NestJS · Next.js 16 · Kafka (Redpanda) · Temporal · PostgreSQL + Prisma · MongoDB ·
+Redis Cluster · recharts · react-map-gl · TypeScript · pnpm monorepo · Docker Compose.
+*(Schema Registry / Avro and a JWT identity service are planned, not yet wired.)*
 
 ## Monorepo layout
 
 ```
-apps/        identity, write-api, read-api, projection-worker, outbox-poller,
-             saga-worker, telemetry-worker, web-customer, web-merchant,
-             web-driver, web-admin
-packages/    contracts (Avro + envelope), tenant-context, shared
+apps/        write-api, read-api, outbox-poller, projection-worker, saga-worker,
+             telemetry-worker, web-customer, web-merchant, web-driver, web-admin
+             (identity service: planned)
+packages/    contracts (event types + envelope/key helpers), shared (Prisma, Mongo,
+             Redis, event-store), tenant-context, web-shared (design system + client)
 infra/       docker-compose.yml + runbook
 spikes/      Phase 0 de-risking scripts (throwaway)
-docs/        specs and per-phase plans
+docs/        ARCHITECTURE.md, specs, per-phase plans, backlog
 ```
 
 ---
@@ -91,14 +118,15 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | Phase | Goal | Status |
 |-------|------|--------|
 | **0** | Infra up + de-risk Kafka / Temporal / outbox / Redis Cluster | ✅ complete |
-| 1 | Walking skeleton — one tenant, one order, end-to-end (CQRS/ES/outbox, projection, SSE, Temporal saga, driver telemetry) | 🚧 in progress |
-| 2 | Two tenants + identity + isolation hard mode | planned |
-| 3 | Deepen every box to hard mode (full ES, Avro, saga, geo) | planned |
+| **1** | Walking skeleton end-to-end (CQRS/ES/outbox, projection, SSE, Temporal saga, telemetry) **+ all four frontends** | ✅ complete |
+| 2 | Two tenants + identity (JWT) + isolation hard mode (Postgres RLS) | planned |
+| 3 | Deepen every box to hard mode (full ES, Avro + Schema Registry, real payments, driver dispatch) | planned |
 | 4 | Frontend polish + observability story | planned |
 
-Phase 1 is built in vertical slices: **1a** write path (event store + outbox), **1b**
-read path (projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga,
-**1c-ii** driver telemetry (Redis geo + nearby query).
+Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
+(projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga, **1c-ii** driver
+telemetry (Redis geo + nearby), and **1d** the frontends — **1d-i** customer storefront,
+**1d-ii** merchant dashboard, **1d-iii** driver view, **1d-iv** cross-tenant admin grid.
 
 ---
 
@@ -128,6 +156,43 @@ Observability UIs: Temporal at <http://localhost:8080>, Redpanda Console at
 > **macOS note:** Redis runs as a single-container `grokzen/redis-cluster` (6-node)
 > on ports 7100–7105 — Docker Desktop for Mac can't expose discrete cluster nodes to the
 > host. Logically still a 6-node cluster; production would use discrete nodes.
+
+---
+
+## Run the full app (Phase 1)
+
+Bring up infra, then the order pipeline and whichever frontend(s) you want — each in its own
+terminal (or background them):
+
+```bash
+pnpm infra:up          # Postgres, Mongo, Redpanda, Temporal, Redis Cluster
+
+# order plane
+pnpm dev:write-api     # :3001  place orders, relay merchant accept/decline
+pnpm dev:read-api      # :3002  queries, SSE, telemetry ingest + nearby
+pnpm dev:outbox        # outbox  -> Kafka
+pnpm dev:projection    # Kafka   -> Mongo read model
+pnpm dev:saga          # Temporal order-lifecycle workflow (charge / SLA / accept|refund)
+pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
+
+# frontends (each proxies /api/read -> :3002, /api/write -> :3001)
+pnpm dev:web-customer  # :3100  storefront + order tracking
+pnpm dev:web-merchant  # :3101  live order queue, accept/decline
+pnpm dev:web-driver    # :3102  nearby-drivers map (needs NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
+pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
+```
+
+| Surface | URL | Surface | URL |
+|---|---|---|---|
+| Customer | <http://localhost:3100> | write-api | <http://localhost:3001> |
+| Merchant | <http://localhost:3101> | read-api | <http://localhost:3002> |
+| Driver | <http://localhost:3102> | Temporal UI | <http://localhost:8080> |
+| Admin | <http://localhost:3103> | Redpanda Console | <http://localhost:8085> |
+
+Tenancy is the `X-Tenant-ID` header (`berlin` or `tokyo`); the frontends carry it for you. Maps use
+a public `NEXT_PUBLIC_MAPBOX_TOKEN` (a fallback panel renders without one). **Tests:** `pnpm test`
+(backend, needs infra up), `pnpm --filter @flashbite/web-shared test` (frontend units), and
+`pnpm test:e2e:<customer|merchant|driver|admin>` (Playwright, needs the relevant services up).
 
 ---
 
