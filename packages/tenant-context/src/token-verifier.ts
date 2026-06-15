@@ -23,8 +23,7 @@ export class TokenVerifier {
     const cfg = loadConfig();
     this.issuer = opts?.issuer ?? cfg.jwtIssuer;
     this.audience = opts?.audience ?? cfg.jwtAudience;
-    const jwksUrl = (cfg as { jwtJwksUrl?: string }).jwtJwksUrl ?? "http://localhost:3003/.well-known/jwks.json";
-    this.keyResolver = opts?.keyResolver ?? createRemoteJWKSet(new URL(jwksUrl));
+    this.keyResolver = opts?.keyResolver ?? createRemoteJWKSet(new URL(cfg.jwtJwksUrl));
   }
 
   async verify(token: string): Promise<AuthContext> {
