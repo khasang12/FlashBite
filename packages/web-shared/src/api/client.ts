@@ -57,3 +57,49 @@ export function acceptOrder(tenantId: string, orderId: string): Promise<void> {
 export function declineOrder(tenantId: string, orderId: string): Promise<void> {
   return signalOrder(tenantId, orderId, "decline");
 }
+
+export interface NearbyDriver {
+  driverId: string;
+  distanceKm: number;
+  lng: number;
+  lat: number;
+}
+
+export interface ReportLocationBody {
+  lng: number;
+  lat: number;
+  orderId?: string;
+}
+
+/**
+ * POST /drivers/:id/location — telemetry ingest. Intentionally on the READ proxy:
+ * the ingest endpoint is served by read-api (:3002), not write-api.
+ */
+export async function reportLocation(
+  tenantId: string,
+  driverId: string,
+  body: ReportLocationBody,
+): Promise<{ driverId: string }> {
+  const res = await fetch(`/api/read/drivers/${encodeURIComponent(driverId)}/location`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...tenantHeader(tenantId) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`reportLocation failed: ${res.status}`);
+  return (await res.json()) as { driverId: string };
+}
+
+/** GET /drivers/nearby via the same-origin read proxy. Distance-sorted ascending. */
+export async function getNearbyDrivers(
+  tenantId: string,
+  lng: number,
+  lat: number,
+  radiusKm = 5,
+): Promise<NearbyDriver[]> {
+  const qs = new URLSearchParams({ lng: String(lng), lat: String(lat), radiusKm: String(radiusKm) });
+  const res = await fetch(`/api/read/drivers/nearby?${qs.toString()}`, {
+    headers: tenantHeader(tenantId),
+  });
+  if (!res.ok) throw new Error(`getNearbyDrivers failed: ${res.status}`);
+  return (await res.json()) as NearbyDriver[];
+}

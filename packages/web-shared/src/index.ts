@@ -45,10 +45,17 @@ export {
   CarouselNext,
 } from "./components/ui/carousel";
 
-export { placeOrder, getOrder, listOrders, acceptOrder, declineOrder, type PlaceOrderRequest } from "./api/client";
+export {
+  placeOrder, getOrder, listOrders, acceptOrder, declineOrder,
+  reportLocation, getNearbyDrivers,
+  type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody,
+} from "./api/client";
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
 export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
 export { useCartStore, type CartLine } from "./store/cart-store";
+export { type GeoPoint } from "./geo/types";
+export { CITY_CENTERS, type CityCenter } from "./geo/city-centers";
+export { toNearbyRows, formatKm } from "./geo/nearby";
 export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";

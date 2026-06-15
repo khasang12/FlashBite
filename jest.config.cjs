@@ -49,5 +49,5 @@ module.exports = {
   // clean exit since long-lived clients keep handles open past afterAll teardown.
   maxWorkers: 1,
   forceExit: true,
-  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/apps/web-customer/", "<rootDir>/apps/web-merchant/"],
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/apps/web-customer/", "<rootDir>/apps/web-merchant/", "<rootDir>/apps/web-driver/"],
 };

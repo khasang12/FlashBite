@@ -67,3 +67,49 @@ by tenant. That stream is **tenant-wide (merchant view)**, not per-order/per-cus
 
 Until then, the tracking page polls with a bounded cap (>SLA) + tab-hidden pause + manual
 refresh — adequate, but the SSE channel is the proper fix.
+
+## Driver dispatch — close the order↔driver loop (backend phase)
+
+**Goal:** Integrate the driver into the order lifecycle. Today the **order plane** (saga:
+charge → merchant accept/decline → accept/refund) and the **telemetry plane** (driver GPS →
+Redis geo → nearby) are disconnected: nothing assigns an accepted order to a driver, and the
+driver view (Phase 1d-iii) is a standalone GPS/nearby surface that never references an order.
+`DriverLocationDto.orderId` exists but is carried-and-unused downstream.
+
+**Why it's its own phase (not a frontend slice):** it requires new backend orchestration +
+events + endpoints, mirroring the merchant-approval pattern.
+
+**Rough shape:**
+1. **Saga dispatch step** after `OrderAccepted`: find a nearby driver (the Redis geo query
+   already exists) and emit an `OrderDispatched` / assignment; race a driver-accept signal vs
+   a dispatch SLA (re-dispatch on timeout), mirroring the merchant-approval timer.
+2. **Driver endpoints/signals** (write-api): accept/decline a dispatch (signals the saga),
+   then status transitions `PICKED_UP` → `DELIVERED`.
+3. **New events + projections**: an order shows its assigned driver; a driver sees their
+   assigned order. New order statuses beyond PLACED/ACCEPTED/CANCELLED.
+4. **Then** upgrade the driver view (1d-iii) from telemetry-only to order-integrated:
+   show the assigned order, accept/decline, mark picked-up/delivered.
+
+Phase 1d-iii ships the telemetry/GPS surface (option A); this entry is the deferred
+order↔driver integration (option B).
+
+## Microfrontend shell — unify the three frontends (architecture phase)
+
+**Goal:** Compose `web-customer` (3100), `web-merchant` (3101), and `web-driver` (3102) into a
+single coherent product shell once the end-to-end ordering flow (incl. driver dispatch) is in
+place, instead of three independently-served Next.js apps.
+
+**Why later, not now:** today the three surfaces serve disjoint roles with no shared in-app
+navigation, so standalone apps on separate ports are the simplest thing that works. A
+microfrontend composition only earns its complexity once a user needs to move between surfaces
+in one session (e.g. an operator/admin view, or the unified ordering flow spanning customer →
+merchant → driver).
+
+**Options to weigh when it lands:**
+- **Next.js Multi-Zones** — each app owns a path prefix under one origin (`/`, `/merchant`,
+  `/driver`); simplest, framework-native, independent deploys, no runtime federation.
+- **Module Federation** (`@module-federation/nextjs-mf`) — runtime-shared components/remotes;
+  more powerful, more operational complexity; justified only if surfaces must share live state.
+
+`packages/web-shared` already gives a shared design system + API client, so most of the
+de-duplication value is captured; this entry is about navigation/routing/deploy composition.
