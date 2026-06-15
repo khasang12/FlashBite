@@ -3,6 +3,7 @@ import { EVENT_TYPES, ORDER_STATUS, type OrderView } from "@flashbite/contracts"
 export interface OrderStreamEvent {
   orderId: string;
   eventType: string;
+  cancelReason?: string;
 }
 
 /** The SSE feeder hardcodes `status`, so derive the real status from the event type. */
@@ -27,5 +28,9 @@ export function applyOrderEvent(rows: OrderView[], event: OrderStreamEvent): Ord
   const status = statusFromEventType(event.eventType);
   if (!status) return rows;
   if (!rows.some((r) => r.orderId === event.orderId)) return rows;
-  return rows.map((r) => (r.orderId === event.orderId ? { ...r, status } : r));
+  return rows.map((r) =>
+    r.orderId === event.orderId
+      ? { ...r, status, ...(event.cancelReason ? { cancelReason: event.cancelReason } : {}) }
+      : r,
+  );
 }
