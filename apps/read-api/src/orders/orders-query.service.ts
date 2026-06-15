@@ -33,6 +33,7 @@ export class OrdersQueryService {
       status: doc.status,
       version: doc.version,
       updatedAt: doc.updatedAt,
+      cancelReason: doc.cancelReason,
     };
     await this.redis.cluster.set(cacheKey, JSON.stringify(view), "EX", CACHE_TTL_SECONDS);
     return view;
@@ -56,6 +57,7 @@ export class OrdersQueryService {
       status: doc.status,
       version: doc.version,
       updatedAt: doc.updatedAt,
+      cancelReason: doc.cancelReason,
     }));
   }
 }

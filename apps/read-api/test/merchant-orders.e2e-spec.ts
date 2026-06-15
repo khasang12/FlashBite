@@ -12,14 +12,14 @@ describe("read-api merchant orders list (e2e)", () => {
   let mongo: MongoService;
   const ids: string[] = [];
 
-  const seed = async (tenantId: string, status: string, updatedAt: string) => {
+  const seed = async (tenantId: string, status: string, updatedAt: string, cancelReason?: string) => {
     const orderId = randomUUID();
     ids.push(`${tenantId}:${orderId}`);
     await mongo.db.collection(READ_COLLECTIONS.ORDERS).insertOne({
       _id: `${tenantId}:${orderId}` as never,
       tenantId, orderId, customerId: "c-1",
       items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200,
-      status, version: 1, updatedAt,
+      status, version: 1, updatedAt, ...(cancelReason ? { cancelReason } : {}),
     });
     return orderId;
   };
@@ -50,5 +50,13 @@ describe("read-api merchant orders list (e2e)", () => {
     expect(orderIds).not.toContain(tokyo);
     expect(orderIds.indexOf(newer)).toBeLessThan(orderIds.indexOf(older));
     expect(body.every((o) => o.tenantId === "berlin")).toBe(true);
+  });
+
+  it("returns cancelReason on cancelled orders", async () => {
+    const cancelled = await seed("berlin", ORDER_STATUS.CANCELLED, "2026-06-14T13:00:00.000Z", "SLA_BREACH");
+    const res = await request(app.getHttpServer()).get("/merchant/orders").set("X-Tenant-ID", "berlin");
+    const row = (res.body as OrderView[]).find((o) => o.orderId === cancelled);
+    expect(row?.status).toBe(ORDER_STATUS.CANCELLED);
+    expect(row?.cancelReason).toBe("SLA_BREACH");
   });
 });
