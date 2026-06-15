@@ -7,21 +7,31 @@ import { PrismaClient } from "@prisma/client";
 import { connectTemporal, appendEvent, TemporalHandle } from "@flashbite/shared";
 import { startSagaWorker, SagaWorkerHandle } from "../../saga-worker/src/main";
 import { AppModule } from "../src/app.module";
+import { TokenVerifier } from "@flashbite/tenant-context";
+import { createTestAuth, type TestAuth } from "@flashbite/tenant-context/testing";
 
 describe("write-api merchant accept (e2e)", () => {
   let app: INestApplication;
   let saga: SagaWorkerHandle;
   let temporal: TemporalHandle;
+  let auth: TestAuth;
+  let merchant: string;
   const prisma = new PrismaClient();
 
   beforeAll(async () => {
     await prisma.$connect();
     saga = await startSagaWorker();
     temporal = await connectTemporal();
-    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    auth = await createTestAuth();
+    const mod = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(TokenVerifier)
+      .useValue(auth.verifier)
+      .compile();
     app = mod.createNestApplication();
     await app.init();
+    merchant = await auth.mint({ tenantId: "berlin", role: "merchant", sub: "m-1" });
   }, 60000);
+
   afterAll(async () => {
     await app?.close();
     await saga?.stop();
@@ -38,7 +48,9 @@ describe("write-api merchant accept (e2e)", () => {
       args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60 }],
     });
 
-    const res = await request(app.getHttpServer()).post(`/orders/${orderId}/accept`).set("X-Tenant-ID", "berlin");
+    const res = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/accept`)
+      .set("Authorization", `Bearer ${merchant}`);
     expect(res.status).toBe(202);
 
     const result = await handle.result();

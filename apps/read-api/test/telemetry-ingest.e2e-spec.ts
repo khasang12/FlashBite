@@ -6,16 +6,25 @@ import { randomUUID } from "node:crypto";
 import { Kafka, logLevel } from "kafkajs";
 import { AppModule } from "../src/app.module";
 import { TOPICS, type EventEnvelope, type DriverTelemetryPayload } from "@flashbite/contracts";
+import { TokenVerifier } from "@flashbite/tenant-context";
+import { createTestAuth, type TestAuth } from "@flashbite/tenant-context/testing";
 
 describe("read-api telemetry ingest (e2e)", () => {
   let app: INestApplication;
+  let auth: TestAuth;
+  let berlinToken: string;
   const kafka = new Kafka({ clientId: "ingest-test", brokers: ["localhost:9092"], logLevel: logLevel.NOTHING });
 
   beforeAll(async () => {
-    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    auth = await createTestAuth();
+    const mod = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(TokenVerifier)
+      .useValue(auth.verifier)
+      .compile();
     app = mod.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
+    berlinToken = await auth.mint({ tenantId: "berlin", role: "driver", sub: "d-1" });
   }, 30000);
   afterAll(async () => {
     await app.close();
@@ -32,7 +41,7 @@ describe("read-api telemetry ingest (e2e)", () => {
 
     const res = await request(app.getHttpServer())
       .post(`/drivers/${driverId}/location`)
-      .set("X-Tenant-ID", "berlin")
+      .set("Authorization", `Bearer ${berlinToken}`)
       .send({ lng: 13.405, lat: 52.52 });
     expect(res.status).toBe(202);
 

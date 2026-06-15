@@ -498,7 +498,16 @@ importers:
         version: link:../shared
       '@nestjs/common':
         specifier: 10.4.4
-        version: 10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+        version: 10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      '@nestjs/core':
+        specifier: 10.4.4
+        version: 10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@10.4.4)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      jose:
+        specifier: 5.9.6
+        version: 5.9.6
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
     devDependencies:
       '@types/express':
         specifier: 4.17.21

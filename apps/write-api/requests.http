@@ -18,23 +18,33 @@
 @readUrl = http://localhost:3002
 @identityUrl = http://localhost:3003
 @seedPassword = devpassword
-@tenant = berlin
 # Fixed id so the "place" + "re-place" pair below exercises idempotency.
 @orderId = 31111111-1111-1111-1111-111111111112
 # Fixed driver id so the location POST + nearby query below correlate.
 @driverId = drv-1
 
 # ============================================================================
-# Phase 2a — identity service (port 3003). Unauthenticated issuer of RS256 JWTs.
+# Phase 2 — identity service (port 3003). Unauthenticated issuer of RS256 JWTs.
 # Prereqs: pnpm dev:identity  +  pnpm seed:users  (seeds role@tenant.test users).
 # Login resolves tenant + role from the user row — NOT from a header.
-# (Nothing verifies these tokens yet; that lands in slice 2b.)
+#
+# HOW TO USE THIS FILE (Phase 2):
+#   1. Run the three login requests below (login, loginCustomer, loginTokyo) first.
+#      The REST Client captures each response token automatically.
+#   2. Every write-api and read-api request then sends:
+#        Authorization: Bearer <captured token>
+#      The token carries tenantId + role — the old X-Tenant-ID header is no longer
+#      accepted and will be ignored by the services.
+#   3. To exercise a different tenant or role, log in as that user and use its token.
+#      - Berlin merchant ops (accept/decline): {{login...}} (merchant@berlin.test)
+#      - Berlin order placement + reads:       {{loginCustomer...}} (customer@berlin.test)
+#      - Tokyo order placement + reads:        {{loginTokyo...}} (customer@tokyo.test)
 # ============================================================================
 
 ### Identity health. Expect 200 { "status": "ok" }.
 GET {{identityUrl}}/health
 
-### Log in as a seeded merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 3600 }.
+### Log in as a berlin merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 3600 }.
 ### The JWT carries sub + tenantId=berlin + role=merchant (decode at jwt.io to inspect).
 # @name login
 POST {{identityUrl}}/auth/login
@@ -45,12 +55,32 @@ Content-Type: application/json
   "password": "{{seedPassword}}"
 }
 
+### Log in as a berlin customer so order-placement requests below carry the right role.
+# @name loginCustomer
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@berlin.test",
+  "password": "{{seedPassword}}"
+}
+
+### Log in as a tokyo customer so the tokyo requests below carry a tokyo token.
+# @name loginTokyo
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@tokyo.test",
+  "password": "{{seedPassword}}"
+}
+
 ### JWKS — the public keys used to verify the token above. Expect 200 { "keys": [ ... ] }
 ### (public material only — no d/p/q). `kid` matches the token header's `kid`.
 GET {{identityUrl}}/.well-known/jwks.json
 
-### Bearer-header shape using the captured token. No protected endpoint exists in 2a —
-### this just shows what slice 2b's write-api/read-api will expect. Still returns 200 (health is open).
+### Bearer-header shape using the captured token. Health is open — this just confirms
+### the token is well-formed and accepted (returns 200 regardless).
 GET {{identityUrl}}/health
 Authorization: Bearer {{login.response.body.$.accessToken}}
 
@@ -89,17 +119,17 @@ Content-Type: application/json
   "email": "not-an-email"
 }
 
-### Health — resolves tenant from the X-Tenant-ID header
-GET {{baseUrl}}/health
-X-Tenant-ID: {{tenant}}
-
-### Health — no header -> falls back to DEFAULT_TENANT_ID (berlin)
+### Health — unauthenticated, always open. Expect 200 { "status": "ok" }.
 GET {{baseUrl}}/health
 
-### Place an order (fixed id). Expect 201 { "orderId": "1111...1111" }
+### No token on a protected endpoint -> 401 (the trusted-header fallback is gone in Phase 2).
+GET {{readUrl}}/orders/{{orderId}}
+
+### Place an order (fixed id). Expect 201 { "orderId": "1111...1111" }.
+### Uses customer token — write-api enforces role=customer for order placement.
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "orderId": "{{orderId}}",
@@ -112,7 +142,7 @@ X-Tenant-ID: {{tenant}}
 ### and STILL exactly one event_store row + one outbox row (no duplicate).
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "orderId": "{{orderId}}",
@@ -124,7 +154,7 @@ X-Tenant-ID: {{tenant}}
 ### Place a FRESH random order each run. Expect 201 with a new orderId.
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "orderId": "{{$guid}}",
@@ -136,11 +166,11 @@ X-Tenant-ID: {{tenant}}
   "totalAmount": 2300
 }
 
-### Different tenant (tokyo) — header-based tenant routing (Phase 1).
-### Lands under tenant_id=tokyo, partition key tokyo:<orderId>.
+### Different tenant (tokyo) — token-based tenant routing (Phase 2).
+### Lands under tenant_id=tokyo; token carries tenantId=tokyo + role=customer.
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: tokyo
+Authorization: Bearer {{loginTokyo.response.body.$.accessToken}}
 
 {
   "orderId": "{{$guid}}",
@@ -152,7 +182,7 @@ X-Tenant-ID: tokyo
 ### Validation: missing required fields -> 400 Bad Request
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "orderId": "bad-1"
@@ -161,7 +191,7 @@ X-Tenant-ID: {{tenant}}
 ### Validation: empty items array + bad types -> 400 Bad Request
 POST {{baseUrl}}/orders
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "orderId": "{{$guid}}",
@@ -175,28 +205,27 @@ X-Tenant-ID: {{tenant}}
 # give dev:outbox + dev:projection a moment to flow the event into MongoDB.
 # ============================================================================
 
-### read-api health — resolves tenant from X-Tenant-ID
+### read-api health — open endpoint, no auth required.
 GET {{readUrl}}/health
-X-Tenant-ID: {{tenant}}
 
 ### Query the fixed order placed above. Expect 200 OrderView (status PLACED).
 ### First call reads Mongo + populates the Redis cache; repeat within 10s = cache hit.
 GET {{readUrl}}/orders/{{orderId}}
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 ### Query a non-existent order -> 404
 GET {{readUrl}}/orders/{{$guid}}
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
-### Tenant isolation: the berlin order is NOT visible to tenant tokyo -> 404
+### Tenant isolation: the berlin order is NOT visible to a tokyo token -> 404
 GET {{readUrl}}/orders/{{orderId}}
-X-Tenant-ID: tokyo
+Authorization: Bearer {{loginTokyo.response.body.$.accessToken}}
 
 ### SSE merchant feed (streams live order events for the tenant).
 ### This connection stays OPEN — place an order on write-api in another request
 ### and watch the event arrive here. Cancel the request to close the stream.
 GET {{readUrl}}/merchant/orders/stream
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{login.response.body.$.accessToken}}
 Accept: text/event-stream
 
 # ============================================================================
@@ -210,7 +239,7 @@ Accept: text/event-stream
 ### Stream a driver GPS ping (Berlin centre). Expect 202 { "driverId": "drv-1" }.
 POST {{readUrl}}/drivers/{{driverId}}/location
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "lng": 13.405,
@@ -220,7 +249,7 @@ X-Tenant-ID: {{tenant}}
 ### Another ping with an optional orderId (driver en route to an order). Expect 202.
 POST {{readUrl}}/drivers/{{driverId}}/location
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "lng": 13.408,
@@ -231,16 +260,16 @@ X-Tenant-ID: {{tenant}}
 ### Nearby drivers within 5km of Berlin centre. After dev:telemetry consumes the
 ### ping(s) above, expect 200 with drv-1 (small distanceKm). Run a couple seconds later.
 GET {{readUrl}}/drivers/nearby?lng=13.405&lat=52.52&radiusKm=5
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
-### Tenant isolation: tokyo does NOT see berlin's drivers. Expect 200 [] (no drv-1).
+### Tenant isolation: tokyo token does NOT see berlin's drivers. Expect 200 [] (no drv-1).
 GET {{readUrl}}/drivers/nearby?lng=13.405&lat=52.52&radiusKm=5
-X-Tenant-ID: tokyo
+Authorization: Bearer {{loginTokyo.response.body.$.accessToken}}
 
 ### Validation: out-of-range coords -> 400 Bad Request (controller-scoped ValidationPipe).
 POST {{readUrl}}/drivers/{{driverId}}/location
 Content-Type: application/json
-X-Tenant-ID: {{tenant}}
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
 {
   "lng": 999,

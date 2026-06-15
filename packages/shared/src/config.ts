@@ -14,6 +14,7 @@ export interface AppConfig {
   jwtIssuer: string;
   jwtAudience: string;
   jwtAccessTtl: number;
+  jwtJwksUrl: string;
 }
 
 export const DEFAULT_TENANT_ID = "berlin";
@@ -42,5 +43,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     jwtIssuer: env.JWT_ISSUER ?? "flashbite-identity",
     jwtAudience: env.JWT_AUDIENCE ?? "flashbite",
     jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 3600),
+    jwtJwksUrl: env.JWT_JWKS_URL ?? "http://localhost:3003/.well-known/jwks.json",
   };
 }

@@ -44,4 +44,9 @@ describe("loadConfig JWT settings", () => {
     expect(c.jwtAudience).toBe("aud");
     expect(c.jwtAccessTtl).toBe(900);
   });
+
+  it("defaults jwtJwksUrl to the local identity JWKS endpoint", () => {
+    const cfg = loadConfig({ DATABASE_URL: "postgres://x" });
+    expect(cfg.jwtJwksUrl).toBe("http://localhost:3003/.well-known/jwks.json");
+  });
 });
