@@ -6,8 +6,16 @@ import { loadConfig } from "@flashbite/shared";
 // flashbite_app (restricted) vs superuser. set_config(..., true) is transaction-local,
 // so each isolation assertion runs inside its own interactive transaction.
 describe("RLS tenant isolation (event_store/outbox)", () => {
-  const cfg = loadConfig();
-  const app = new PrismaClient({ datasourceUrl: cfg.appDatabaseUrl });
+  // Derive the restricted-role URL from DATABASE_URL (swap credentials) so this test
+  // always targets flashbite_app — independent of whether APP_DATABASE_URL is set.
+  // Password matches the dev role created by the 20260616000000_rls migration.
+  const restrictedUrl = (() => {
+    const u = new URL(loadConfig().databaseUrl);
+    u.username = "flashbite_app";
+    u.password = "flashbite_app_local_dev";
+    return u.toString();
+  })();
+  const app = new PrismaClient({ datasourceUrl: restrictedUrl });
   const owner = new PrismaClient(); // DATABASE_URL — superuser, bypasses RLS
 
   beforeAll(async () => {

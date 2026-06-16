@@ -168,6 +168,14 @@ terminal (or background them):
 pnpm infra:up          # Postgres, Mongo, Redpanda, Temporal, Redis Cluster
 pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
 pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword
+```
+
+> Phase 2 RLS: `pnpm db:deploy` also creates the restricted `flashbite_app` Postgres role.
+> write-api + saga-worker connect as it via `APP_DATABASE_URL` so Row-Level Security enforces
+> tenant isolation on `event_store`/`outbox`; the outbox-poller stays on the superuser
+> `DATABASE_URL` (it relays every tenant's events).
+
+```bash
 
 # order plane
 pnpm dev:write-api     # :3001  place orders, relay merchant accept/decline
