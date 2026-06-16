@@ -30,6 +30,7 @@ export class OrdersService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
         await tx.eventStore.create({
           data: {
             id: envelope.eventId,
