@@ -6,5 +6,6 @@ import { MerchantSseController } from "./merchant-sse.controller";
 @Module({
   controllers: [MerchantSseController],
   providers: [OrderStreamService, SseFeederService],
+  exports: [OrderStreamService],
 })
 export class SseModule {}
