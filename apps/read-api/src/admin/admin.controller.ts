@@ -2,7 +2,7 @@ import { Controller, Get, Sse, UseGuards } from "@nestjs/common";
 import { Observable, merge } from "rxjs";
 import { map } from "rxjs/operators";
 import { Roles, RolesGuard } from "@flashbite/tenant-context";
-import { TENANTS, type OrderView } from "@flashbite/contracts";
+import { ROLES, TENANTS, type OrderView } from "@flashbite/contracts";
 import { AdminService, type TenantNearbyDriver } from "./admin.service";
 import { OrderStreamService } from "../sse/order-stream.service";
 
@@ -12,7 +12,7 @@ interface MessageEvent {
 
 @Controller("admin")
 @UseGuards(RolesGuard)
-@Roles("operator")
+@Roles(ROLES.OPERATOR)
 export class AdminController {
   constructor(
     private readonly admin: AdminService,

@@ -1,8 +1,9 @@
 import argon2 from "argon2";
 import { PrismaClient } from "@flashbite/shared";
+import { ROLES } from "@flashbite/contracts";
 
 const TENANTS = ["berlin", "tokyo"] as const;
-const ROLES = ["customer", "merchant", "driver", "admin"] as const;
+const SEED_ROLES = [ROLES.CUSTOMER, ROLES.MERCHANT, ROLES.DRIVER, ROLES.ADMIN] as const;
 
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
@@ -10,7 +11,7 @@ async function main(): Promise<void> {
   const passwordHash = await argon2.hash(password);
   try {
     for (const tenantId of TENANTS) {
-      for (const role of ROLES) {
+      for (const role of SEED_ROLES) {
         const email = `${role}@${tenantId}.test`;
         await prisma.user.upsert({
           where: { email },
@@ -24,8 +25,8 @@ async function main(): Promise<void> {
     // Platform operator: cross-tenant console principal (not pinned to a tenant).
     await prisma.user.upsert({
       where: { email: "operator@flashbite.test" },
-      update: { tenantId: "platform", role: "operator", passwordHash },
-      create: { tenantId: "platform", role: "operator", email: "operator@flashbite.test", passwordHash },
+      update: { tenantId: "platform", role: ROLES.OPERATOR, passwordHash },
+      create: { tenantId: "platform", role: ROLES.OPERATOR, email: "operator@flashbite.test", passwordHash },
     });
     // eslint-disable-next-line no-console
     console.log("seeded operator@flashbite.test (platform/operator)");
