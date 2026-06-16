@@ -10,6 +10,7 @@ import { createTestAuth, type TestAuth } from "@flashbite/tenant-context/testing
 
 describe("write-api orders (e2e)", () => {
   let app: INestApplication;
+  // Superuser client for test assertions — bypasses RLS so we can read back inserted rows.
   let prisma: PrismaService;
   let auth: TestAuth;
   let customer: string;
@@ -23,11 +24,15 @@ describe("write-api orders (e2e)", () => {
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
-    prisma = app.get(PrismaService);
+    // Use a superuser client (no URL → DATABASE_URL env) for assertions; the app's
+    // PrismaService connects as flashbite_app (restricted) and is not used for reads here.
+    prisma = new PrismaService();
+    await prisma.onModuleInit();
     customer = await auth.mint({ tenantId: "berlin", role: "customer", sub: "c-1" });
   });
 
   afterAll(async () => {
+    await prisma.onModuleDestroy();
     await app.close();
   });
 

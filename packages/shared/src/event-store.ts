@@ -1,8 +1,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { TOPICS, type EventEnvelope } from "@flashbite/contracts";
 import { buildEnvelope } from "./envelope";
-
-type Tx = Prisma.TransactionClient | PrismaClient;
+import { withTenantTransaction } from "./tenant-transaction";
 
 export interface AppendEventArgs {
   tenantId: string;
@@ -18,7 +17,7 @@ export interface AppendEventArgs {
  * = the full envelope (so the poller publishes the envelope). Returns the envelope.
  */
 export async function appendEvent(prisma: PrismaClient, args: AppendEventArgs): Promise<EventEnvelope> {
-  return prisma.$transaction(async (tx: Tx) => {
+  return withTenantTransaction(prisma, args.tenantId, async (tx) => {
     const last = await tx.eventStore.findFirst({
       where: { tenantId: args.tenantId, aggregateId: args.aggregateId },
       orderBy: { version: "desc" },

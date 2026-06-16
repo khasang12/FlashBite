@@ -1,4 +1,4 @@
-import { loadConfig } from "@flashbite/shared";
+import { loadConfig, requireAppDatabaseUrl } from "@flashbite/shared";
 
 describe("loadConfig", () => {
   it("reads all settings from env with defaults", () => {
@@ -25,6 +25,24 @@ describe("loadConfig", () => {
 
   it("throws when DATABASE_URL is missing", () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
+  });
+});
+
+describe("loadConfig appDatabaseUrl", () => {
+  it("uses APP_DATABASE_URL when set, else falls back to DATABASE_URL", () => {
+    const withApp = loadConfig({ DATABASE_URL: "postgres://owner", APP_DATABASE_URL: "postgres://app" });
+    expect(withApp.appDatabaseUrl).toBe("postgres://app");
+    const noApp = loadConfig({ DATABASE_URL: "postgres://owner" });
+    expect(noApp.appDatabaseUrl).toBe("postgres://owner");
+  });
+});
+
+describe("requireAppDatabaseUrl", () => {
+  it("requireAppDatabaseUrl returns APP_DATABASE_URL when set", () => {
+    expect(requireAppDatabaseUrl({ APP_DATABASE_URL: "postgres://app" })).toBe("postgres://app");
+  });
+  it("requireAppDatabaseUrl throws when APP_DATABASE_URL is missing", () => {
+    expect(() => requireAppDatabaseUrl({})).toThrow(/APP_DATABASE_URL/);
   });
 });
 
