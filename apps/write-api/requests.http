@@ -91,6 +91,33 @@ GET {{identityUrl}}/.well-known/jwks.json
 GET {{identityUrl}}/health
 Authorization: Bearer {{login.response.body.$.accessToken}}
 
+### Log in as the platform operator (cross-tenant console). Expect 201.
+# @name loginOperator
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "operator@flashbite.test",
+  "password": "{{seedPassword}}"
+}
+
+### Operator: all orders across every tenant. Expect 200 OrderView[] spanning berlin + tokyo.
+GET {{readUrl}}/admin/orders
+Authorization: Bearer {{loginOperator.response.body.$.accessToken}}
+
+### Operator: live drivers across every tenant (tagged by tenantId). Expect 200.
+GET {{readUrl}}/admin/drivers
+Authorization: Bearer {{loginOperator.response.body.$.accessToken}}
+
+### Operator SSE: merged order-event stream across all tenants. Stays open.
+GET {{readUrl}}/admin/orders/stream
+Authorization: Bearer {{loginOperator.response.body.$.accessToken}}
+Accept: text/event-stream
+
+### A non-operator token on /admin -> 403 (reuses the merchant login above).
+GET {{readUrl}}/admin/orders
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
 ### Log in as the tokyo admin — different tenantId + role in the token. Expect 201.
 POST {{identityUrl}}/auth/login
 Content-Type: application/json

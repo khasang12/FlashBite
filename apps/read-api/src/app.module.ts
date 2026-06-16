@@ -4,9 +4,10 @@ import { HealthController } from "./health.controller";
 import { OrdersModule } from "./orders/orders.module";
 import { SseModule } from "./sse/sse.module";
 import { DriversModule } from "./drivers/drivers.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
-  imports: [OrdersModule, SseModule, DriversModule],
+  imports: [OrdersModule, SseModule, DriversModule, AdminModule],
   controllers: [HealthController],
   providers: [TokenVerifier],
 })
