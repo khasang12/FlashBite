@@ -3,6 +3,7 @@
 # Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
 # Prereqs:
 #   pnpm infra:up          # Postgres + Redpanda + MongoDB + Redis Cluster running
+#   pnpm db:deploy         # apply migrations + create the flashbite_app RLS role (Phase 2 S2)
 #   pnpm dev:write-api     # http://localhost:3001 (command side)
 #   pnpm dev:outbox        # relays outbox -> order-events
 #   pnpm dev:projection    # order-events -> MongoDB read model
@@ -10,6 +11,12 @@
 #   pnpm dev:telemetry     # telemetry-streams -> Redis geo (driver locations)
 #   pnpm dev:identity      # http://localhost:3003 (Phase 2a: login + JWKS)
 #   pnpm seed:users        # seed demo users (role@tenant.test, e.g. merchant@berlin.test)
+#
+# Phase 2 S2 — Postgres Row-Level Security: write-api + saga-worker connect as the
+# restricted `flashbite_app` role (set APP_DATABASE_URL in .env — see .env.example) and
+# set app.tenant_id per write transaction, so a tenant can only write/read its own
+# event_store/outbox rows. The outbox-poller stays on the superuser DATABASE_URL. If
+# APP_DATABASE_URL is unset, write-api falls back to the superuser (RLS not exercised).
 #
 # Note on random ids: {{$guid}} is the VS Code REST Client generator.
 # In JetBrains HTTP Client use {{$random.uuid}} instead.
@@ -298,4 +305,16 @@ Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 #   docker exec $(docker compose -f infra/docker-compose.yml ps -q redis-cluster) \
 #     redis-cli -c -p 7100 GEOSEARCH "{tenant:berlin}:drivers:geo" \
 #     FROMLONLAT 13.405 52.52 BYRADIUS 5 km ASC WITHDIST WITHCOORD
+#
+#   # Phase 2 S2 — see RLS actually enforce. The psql commands above use -U flashbite
+#   # (SUPERUSER), which BYPASSES RLS and sees every tenant. To watch the policy bite,
+#   # connect as the restricted flashbite_app role and set the tenant GUC per query:
+#   docker exec -e PGPASSWORD=flashbite_app_local_dev \
+#     $(docker compose -f infra/docker-compose.yml ps -q postgres) \
+#     psql -U flashbite_app -d flashbite_write \
+#     -c "SELECT count(*) AS visible_without_guc FROM event_store;" \  # 0 (fail-closed)
+#     -c "BEGIN; SELECT set_config('app.tenant_id','berlin',true); \
+#         SELECT count(*) AS berlin_rows FROM event_store; \
+#         SELECT count(*) AS tokyo_rows  FROM event_store WHERE tenant_id='tokyo'; COMMIT;"
+#   # Expect: visible_without_guc=0; berlin_rows>0; tokyo_rows=0 (other tenants hidden).
 # ----------------------------------------------------------------------------
