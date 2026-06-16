@@ -22,6 +22,25 @@ export const DEFAULT_TENANT_ID = "berlin";
 
 const DEFAULT_REDIS_NODES = "127.0.0.1:7100,127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103,127.0.0.1:7104,127.0.0.1:7105";
 
+/**
+ * Returns APP_DATABASE_URL or throws. write-api + saga-worker call this at startup so the
+ * service refuses to boot without the restricted `flashbite_app` connection — otherwise a
+ * missing var would silently fall back to the superuser DATABASE_URL and DISABLE RLS
+ * (fail-open). The loadConfig().appDatabaseUrl fallback remains only for tests, which do
+ * not run these entrypoints.
+ */
+export function requireAppDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
+  const url = env.APP_DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "APP_DATABASE_URL is required so write-api/saga-worker connect as the restricted " +
+        "flashbite_app role for Postgres RLS. Set it in .env (see .env.example). Refusing to " +
+        "start: falling back to the superuser DATABASE_URL would silently disable tenant isolation.",
+    );
+  }
+  return url;
+}
+
 export function loadConfig(env: Record<string, string | undefined> = process.env): AppConfig {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {

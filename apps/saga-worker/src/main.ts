@@ -3,7 +3,7 @@ import { Worker, NativeConnection } from "@temporalio/worker";
 import { WorkflowIdReusePolicy } from "@temporalio/client";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, loadConfig, type TemporalHandle } from "@flashbite/shared";
+import { connectTemporal, loadConfig, requireAppDatabaseUrl, type TemporalHandle } from "@flashbite/shared";
 import {
   CONSUMER_GROUPS,
   EVENT_TYPES,
@@ -78,6 +78,7 @@ export async function startOrderConsumer(
 }
 
 async function main(): Promise<void> {
+  requireAppDatabaseUrl(); // fail loud if the restricted RLS role isn't configured
   const config = loadConfig();
   const saga = await startSagaWorker();
   const temporal = await connectTemporal();
