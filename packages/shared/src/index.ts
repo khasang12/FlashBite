@@ -8,3 +8,4 @@ export * from "./redis.service";
 export * from "./envelope";
 export * from "./event-store";
 export * from "./temporal";
+export * from "./tenant-transaction";

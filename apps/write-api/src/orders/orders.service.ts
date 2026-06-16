@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService, Prisma, buildEnvelope } from "@flashbite/shared";
+import { PrismaService, Prisma, buildEnvelope, withTenantTransaction } from "@flashbite/shared";
 import { getTenantId } from "@flashbite/tenant-context";
 import {
   AGGREGATE_TYPES,
@@ -29,8 +29,7 @@ export class OrdersService {
     });
 
     try {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      await withTenantTransaction(this.prisma, tenantId, async (tx) => {
         await tx.eventStore.create({
           data: {
             id: envelope.eventId,
