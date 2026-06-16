@@ -21,7 +21,7 @@ export interface SagaWorkerHandle {
 /** Boots the Temporal worker (workflows + activities). Returns a stop handle. */
 export async function startSagaWorker(): Promise<SagaWorkerHandle> {
   const config = loadConfig();
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ datasourceUrl: config.appDatabaseUrl });
   await prisma.$connect();
 
   const connection = await NativeConnection.connect({ address: config.temporalAddress });

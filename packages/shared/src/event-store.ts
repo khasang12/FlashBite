@@ -19,6 +19,7 @@ export interface AppendEventArgs {
  */
 export async function appendEvent(prisma: PrismaClient, args: AppendEventArgs): Promise<EventEnvelope> {
   return prisma.$transaction(async (tx: Tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${args.tenantId}, true)`;
     const last = await tx.eventStore.findFirst({
       where: { tenantId: args.tenantId, aggregateId: args.aggregateId },
       orderBy: { version: "desc" },
