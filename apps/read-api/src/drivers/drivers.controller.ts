@@ -1,9 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UsePipes, ValidationPipe } from "@nestjs/common";
-import { getTenantId } from "@flashbite/tenant-context";
-import { driverGeoKey } from "@flashbite/contracts";
 import { RedisService } from "@flashbite/shared";
 import { DriverLocationDto } from "./driver-location.dto";
 import { TelemetryProducerService } from "./telemetry-producer.service";
+import { currentTenant, scopedGeoKey } from "../tenant-scope";
 
 interface NearbyDriver {
   driverId: string;
@@ -26,7 +25,7 @@ export class DriversController {
     @Param("driverId") driverId: string,
     @Body() dto: DriverLocationDto,
   ): Promise<{ driverId: string }> {
-    const tenantId = getTenantId();
+    const tenantId = currentTenant();
     await this.telemetry.publish(tenantId, { driverId, lng: dto.lng, lat: dto.lat, orderId: dto.orderId });
     return { driverId };
   }
@@ -37,9 +36,8 @@ export class DriversController {
     @Query("lat") lat: string,
     @Query("radiusKm") radiusKm = "5",
   ): Promise<NearbyDriver[]> {
-    const tenantId = getTenantId();
     const raw = (await this.redis.cluster.geosearch(
-      driverGeoKey(tenantId),
+      scopedGeoKey(),
       "FROMLONLAT",
       lng,
       lat,

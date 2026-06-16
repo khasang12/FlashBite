@@ -1,7 +1,7 @@
 import { Controller, Sse } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
-import { getTenantId } from "@flashbite/tenant-context";
+import { currentTenant } from "../tenant-scope";
 import { OrderStreamService } from "./order-stream.service";
 
 interface MessageEvent {
@@ -14,7 +14,7 @@ export class MerchantSseController {
 
   @Sse("stream")
   ordersStream(): Observable<MessageEvent> {
-    const tenantId = getTenantId();
+    const tenantId = currentTenant();
     return this.stream.stream(tenantId).pipe(map((event) => ({ data: event })));
   }
 }
