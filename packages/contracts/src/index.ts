@@ -126,3 +126,24 @@ export const ORDER_CANCEL_REASONS = {
   SLA_BREACH: "SLA_BREACH",
   DECLINED: "DECLINED",
 } as const;
+
+// ---- Geo / operator console ----
+export const TENANTS = ["berlin", "tokyo"] as const;
+export type Tenant = (typeof TENANTS)[number];
+
+export interface GeoPoint {
+  lng: number;
+  lat: number;
+}
+
+export const CITY_CENTERS: Record<Tenant, GeoPoint> = {
+  berlin: { lng: 13.405, lat: 52.52 },
+  tokyo: { lng: 139.7, lat: 35.68 },
+};
+
+export interface NearbyDriver {
+  driverId: string;
+  distanceKm: number;
+  lng: number;
+  lat: number;
+}
