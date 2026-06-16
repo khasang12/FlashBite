@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { MongoService, RedisService } from "@flashbite/shared";
-import { getTenantId } from "@flashbite/tenant-context";
-import { READ_COLLECTIONS, tenantKey, type OrderView } from "@flashbite/contracts";
+import { READ_COLLECTIONS, type OrderView } from "@flashbite/contracts";
+import { scopedId, scopedKey, tenantFilter } from "../tenant-scope";
 
 const CACHE_TTL_SECONDS = 10;
 
@@ -13,15 +13,14 @@ export class OrdersQueryService {
   ) {}
 
   async getOrder(orderId: string): Promise<OrderView | null> {
-    const tenantId = getTenantId();
-    const cacheKey = tenantKey(tenantId, "order", orderId, "view");
+    const cacheKey = scopedKey("order", orderId, "view");
 
     const cached = await this.redis.cluster.get(cacheKey);
     if (cached) return JSON.parse(cached) as OrderView;
 
     const doc = await this.mongo.db
       .collection(READ_COLLECTIONS.ORDERS)
-      .findOne({ _id: `${tenantId}:${orderId}` as never });
+      .findOne({ _id: scopedId(orderId) as never });
     if (!doc) return null;
 
     const view: OrderView = {
@@ -41,10 +40,9 @@ export class OrdersQueryService {
 
   /** Tenant's most-recent orders (all statuses) for the merchant dashboard. Capped. */
   async listRecentOrders(limit = 100): Promise<OrderView[]> {
-    const tenantId = getTenantId();
     const docs = await this.mongo.db
       .collection(READ_COLLECTIONS.ORDERS)
-      .find({ tenantId })
+      .find(tenantFilter())
       .sort({ updatedAt: -1 })
       .limit(limit)
       .toArray();
