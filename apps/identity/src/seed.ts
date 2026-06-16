@@ -21,6 +21,14 @@ async function main(): Promise<void> {
         console.log(`seeded ${email} (${tenantId}/${role})`);
       }
     }
+    // Platform operator: cross-tenant console principal (not pinned to a tenant).
+    await prisma.user.upsert({
+      where: { email: "operator@flashbite.test" },
+      update: { tenantId: "platform", role: "operator", passwordHash },
+      create: { tenantId: "platform", role: "operator", email: "operator@flashbite.test", passwordHash },
+    });
+    // eslint-disable-next-line no-console
+    console.log("seeded operator@flashbite.test (platform/operator)");
   } finally {
     await prisma.$disconnect();
   }
