@@ -8,10 +8,9 @@ import {
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 
 export function OrderDetailSheet({
-  order, tenant, onClose,
+  order, onClose,
 }: {
   order: OrderView | null;
-  tenant: string;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -22,11 +21,11 @@ export function OrderDetailSheet({
     setBusy(false);
   }, [order?.orderId]);
 
-  const act = async (fn: (t: string, id: string) => Promise<void>) => {
+  const act = async (fn: (id: string) => Promise<void>) => {
     if (!order) return;
     setBusy(true); setError(null);
     try {
-      await fn(tenant, order.orderId);
+      await fn(order.orderId);
       onClose(); // status flips when the saga's event arrives over SSE
     } catch {
       setError("Action failed. Please try again.");

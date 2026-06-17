@@ -2,15 +2,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listOrders, getOrder, useOrderStream, applyOrderEvent, upsertOrder,
-  statusFromEventType, useTenantStore, Input, ORDER_STATUS,
+  statusFromEventType, useAuthStore, Input, ORDER_STATUS, AuthGate,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   type OrderView, type OrderStreamEvent,
 } from "@flashbite/web-shared";
 import { OrdersTable } from "@/components/orders-table";
 import { OrderDetailSheet } from "@/components/order-detail-sheet";
 
-export default function Dashboard() {
-  const tenant = useTenantStore((s) => s.tenant);
+const MERCHANT_DEMOS = [
+  { label: "Berlin merchant", email: "merchant@berlin.test" },
+  { label: "Tokyo merchant", email: "merchant@tokyo.test" },
+];
+
+function MerchantDashboard() {
+  const tenantId = useAuthStore((s) => s.claims?.tenantId);
   const [orders, setOrders] = useState<OrderView[]>([]);
   const ordersRef = useRef(orders);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -19,8 +24,8 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<OrderView | null>(null);
 
   const resync = useCallback(() => {
-    listOrders(tenant).then(setOrders).catch(() => setOrders([]));
-  }, [tenant]);
+    listOrders().then(setOrders).catch(() => setOrders([]));
+  }, []);
 
   useEffect(() => { resync(); }, [resync]);
 
@@ -33,7 +38,7 @@ export default function Dashboard() {
       // getOrder until the projection catches up (bounded) instead of dropping it.
       let tries = 0;
       const fetchRow = (): void => {
-        getOrder(tenant, e.orderId)
+        getOrder(e.orderId)
           .then((o) => {
             if (o) { setOrders((cur) => upsertOrder(cur, o)); return; }
             if (++tries < 10) setTimeout(fetchRow, 500);
@@ -42,9 +47,9 @@ export default function Dashboard() {
       };
       fetchRow();
     }
-  }, [tenant]);
+  }, []);
 
-  useOrderStream(tenant, onEvent, resync);
+  useOrderStream(onEvent, resync);
 
   const current = selected ? orders.find((o) => o.orderId === selected.orderId) ?? selected : null;
   const visible = status === "ALL" ? orders : orders.filter((o) => o.status === status);
@@ -53,7 +58,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b px-6 py-4">
         <div className="text-lg font-extrabold">flashbite <span className="text-muted-foreground font-semibold">merchant</span></div>
-        <div className="flex items-center gap-2 text-sm font-semibold"><span className="h-2 w-2 rounded-full bg-primary" />{tenant}</div>
+        <div className="flex items-center gap-2 text-sm font-semibold"><span className="h-2 w-2 rounded-full bg-primary" />{tenantId}</div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-6">
         <div className="mb-4 flex items-center gap-3">
@@ -72,7 +77,15 @@ export default function Dashboard() {
         </div>
         <OrdersTable data={visible} globalFilter={filter} onRowClick={setSelected} />
       </main>
-      <OrderDetailSheet order={current} tenant={tenant} onClose={() => setSelected(null)} />
+      <OrderDetailSheet order={current} onClose={() => setSelected(null)} />
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <AuthGate demoUsers={MERCHANT_DEMOS} requiredRole="merchant" title="FlashBite — Merchant">
+      <MerchantDashboard />
+    </AuthGate>
   );
 }

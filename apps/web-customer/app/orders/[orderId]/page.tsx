@@ -2,7 +2,6 @@
 import { use, useEffect, useState } from "react";
 import {
   getOrder,
-  useTenantStore,
   StatusPill,
   Card,
   CardContent,
@@ -26,7 +25,6 @@ export default function OrderTracking({
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = use(params);
-  const tenant = useTenantStore((s) => s.tenant);
   const [order, setOrder] = useState<OrderView | null>(null);
   const [waiting, setWaiting] = useState(true);
   const [stopped, setStopped] = useState(false);
@@ -45,7 +43,7 @@ export default function OrderTracking({
         timer = setTimeout(tick, POLL_MS);
         return;
       }
-      const o = await getOrder(tenant, orderId).catch(() => null);
+      const o = await getOrder(orderId).catch(() => null);
       if (!active) return;
       if (o) {
         setOrder(o);
@@ -68,7 +66,7 @@ export default function OrderTracking({
       active = false;
       clearTimeout(timer);
     };
-  }, [tenant, orderId, round]);
+  }, [orderId, round]);
 
   const isTerminal = order ? TERMINAL.includes(order.status) : false;
 

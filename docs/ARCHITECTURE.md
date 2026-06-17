@@ -1,9 +1,9 @@
 # FlashBite — Architecture (what's built so far)
 
-This document describes the system **as currently implemented** (Phase 0 + Phase 1: the
-walking-skeleton order plane, the telemetry plane, and all four Phase 1d frontends). It is
-deliberately scoped to working code — a "Not yet built" section at the end lists what the master
-spec still defers to later phases.
+This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2: the
+walking-skeleton order plane, the telemetry plane, all four frontends, and the verified-JWT identity
++ Postgres-RLS isolation layer). It is deliberately scoped to working code — a "Not yet built"
+section at the end lists what the master spec still defers to later phases.
 
 > Companion to the vision spec in
 > [`docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md`](superpowers/specs/2026-06-13-flashbite-showcase-design.md).
@@ -15,7 +15,9 @@ spec still defers to later phases.
 
 FlashBite is a pnpm monorepo of NestJS services, plain-TS workers, and Next.js frontends, over
 Postgres / MongoDB / Redis Cluster / Redpanda (Kafka) / Temporal. It is **CQRS**: a write plane
-(event-sourced) and a read plane (projected), joined by Kafka.
+(event-sourced) and a read plane (projected), joined by Kafka. Every API request carries a
+**verified RS256 JWT** (from the `identity` service); tenant + role come from the token, not a
+trusted header.
 
 ```mermaid
 flowchart LR
@@ -27,6 +29,7 @@ flowchart LR
   end
 
   subgraph API["API tier - NestJS"]
+    ID["identity :3003 - RS256 JWT + JWKS"]
     W["write-api :3001"]
     R["read-api :3002"]
   end
@@ -39,19 +42,22 @@ flowchart LR
   end
 
   subgraph DATA["Infrastructure"]
-    PG[("Postgres - event store + outbox")]
+    PG[("Postgres - event store + outbox + RLS")]
     MG[("MongoDB - read models + inbox")]
     RS[("Redis Cluster - cache + geo")]
     KF["Redpanda - Kafka"]
     TP["Temporal"]
   end
 
-  C -->|"place / track"| W
-  C -->|"GET order"| R
-  M -->|"accept / decline"| W
-  M -->|"orders list + SSE"| R
-  D -->|"location / nearby"| R
-  A -->|"per-tenant fan-out"| R
+  FE -->|"login"| ID
+  W -.->|"verify via JWKS"| ID
+  R -.->|"verify via JWKS"| ID
+  C -->|"Bearer: place / track"| W
+  C -->|"Bearer: GET order"| R
+  M -->|"Bearer: accept / decline"| W
+  M -->|"Bearer: orders + SSE"| R
+  D -->|"Bearer: location / nearby"| R
+  A -->|"Bearer operator: /admin/*"| R
 
   W --> PG
   PG --> OB --> KF
@@ -81,8 +87,9 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 
 | Component | Type | Port | Responsibility |
 |---|---|---|---|
-| `write-api` | NestJS | 3001 | Place orders (append `OrderPlaced` to the event store + outbox, atomically); relay merchant accept/decline as a Temporal signal. |
-| `read-api` | NestJS | 3002 | Query orders (Mongo + Redis cache-aside); merchant SSE stream; telemetry ingest + `GET /drivers/nearby`. |
+| `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
+| `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders (append `OrderPlaced` to the event store + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal. `@Roles` gates: `customer` places, `merchant` accepts/declines. |
+| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `saga-worker` | TS worker + Temporal | — | One workflow per order: charge → race SLA timer vs merchant approval → accept, or refund + cancel. |
@@ -90,12 +97,14 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | `web-customer` | Next.js | 3100 | Storefront: menu, cart, checkout, live order tracking. |
 | `web-merchant` | Next.js | 3101 | Order queue (live SSE), accept/decline. |
 | `web-driver` | Next.js | 3102 | Go online, view nearby drivers on a Mapbox map (GPS streamed by a script). |
-| `web-admin` | Next.js | 3103 | Cross-tenant operator grid: GMV/analytics charts, per-tenant driver maps, combined orders. |
+| `web-admin` | Next.js | 3103 | Operator console (logs in as `operator@flashbite.test`): cross-tenant GMV/analytics charts, per-tenant driver maps, combined orders — served by the `/admin/*` endpoints. |
 
-**Shared packages:** `contracts` (event types, status/reason enums, topic + key helpers,
-`OrderView`), `shared` (Prisma client, event-store/outbox append, Mongo + Redis clients, JSON
-envelope builder), `tenant-context` (AsyncLocalStorage tenant scope + `X-Tenant-ID` middleware),
-`web-shared` (design system, API client, stores, SSE hook, geo + analytics helpers).
+**Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
+topic + key helpers, `OrderView`), `shared` (Prisma client + optional restricted-role URL,
+`withTenantTransaction` for the RLS GUC, event-store/outbox append, Mongo + Redis clients, JSON
+envelope builder), `tenant-context` (verify-JWT `TokenVerifier` + `AuthMiddleware` →
+AsyncLocalStorage `{tenantId, role, sub}`, `@Roles`/`RolesGuard`), `web-shared` (design system, API
+client, auth store + `AuthGate`/`LoginForm`, stores, SSE hook, geo + analytics helpers).
 
 ---
 
@@ -203,20 +212,24 @@ flowchart LR
   Cu -->|"GET /orders/:id"| R
   M -->|"GET /merchant/orders"| R
   M -->|"GET /merchant/orders/stream (SSE)"| R
-  Ad -->|"fan-out per tenant"| R
+  Ad -->|"operator: GET /admin/orders|drivers|stream"| R
   R -->|"cache-aside (10s TTL)"| RS
   R --> MG
   KF -->|"read-api-sse consumer"| R
 ```
 
 - **Cache-aside:** `GET /orders/:id` checks Redis (`tenant:{id}:order:<id>:view`, 10s TTL) before
-  Mongo.
+  Mongo. Every tenant-scoped read derives the tenant from the JWT via the `tenant-scope` chokepoint
+  (`scopedId`/`tenantFilter`/`scopedKey`) — a query can't forget the tenant filter.
 - **SSE:** read-api runs its own Kafka consumer (`read-api-sse` group) and pushes per-tenant order
-  events to subscribers; the merchant dashboard and admin grid consume it. The frontend derives the
-  real status from the event type (the wire event also carries `cancelReason` on cancel).
-- **Admin fan-out:** there is **no cross-tenant endpoint**. `web-admin` loops the fixed tenants and
-  calls the per-tenant endpoints, aggregating in the browser (an authenticated cross-tenant admin
-  API is backlogged).
+  events to subscribers; the merchant dashboard consumes its tenant's stream, the operator console a
+  merged all-tenant stream. The frontend derives the real status from the event type (the wire event
+  also carries `cancelReason` on cancel).
+- **Operator console:** `web-admin` authenticates as an `operator` and calls the **cross-tenant**
+  `GET /admin/orders` (all tenants), `GET /admin/drivers` (loops tenants, GEOSEARCH per city
+  center), and `GET /admin/orders/stream` (merged SSE, each event tagged with `tenantId`). These are
+  the only routes that bypass tenant scoping, gated by `@Roles("operator")`; they read Mongo + Redis
+  only (no Postgres). Aggregation (GMV, charts) stays client-side.
 
 ---
 
@@ -247,15 +260,41 @@ concern. `web-driver` shows one tenant's nearby drivers; `web-admin` shows both 
 
 ---
 
-## 6. Multi-tenancy & key model
+## 6. Identity, multi-tenancy & isolation
 
-Two tenants exist today — **berlin** and **tokyo** — to prove isolation.
+Two tenants exist — **berlin** and **tokyo** — to prove isolation. Isolation rests on
+**cryptographic identity** (a verified JWT), backstopped by **Postgres RLS** on the write plane.
 
-- **Tenant resolution (current):** the `X-Tenant-ID` header, read by `tenant-context` middleware
-  into an `AsyncLocalStorage` scope; every read-api/write-api route resolves `getTenantId()`. This
-  is **trusted** for now — a verified-JWT identity service replaces it in Phase 2.
-- **Postgres:** events/outbox carry `tenantId`; read-model `_id` is `tenantId:orderId`, inbox `_id`
-  is `tenantId:consumer:eventId`.
+**Identity & token flow (Phase 2):**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant FE as Frontend
+  participant ID as identity :3003
+  participant API as write-api / read-api
+  FE->>ID: POST /auth/login (email, password)
+  ID->>ID: argon2id verify; look up tenantId + role
+  ID-->>FE: RS256 JWT (sub, tenantId, role, iss, aud, exp)
+  FE->>API: request + Authorization Bearer jwt
+  API->>ID: GET /.well-known/jwks.json (cached, by kid)
+  API->>API: verify sig + iss/aud/exp, scope tenantId+role+sub
+  Note over API: Roles guard 403 on mismatch; 401 if no/invalid token
+```
+
+- **Tenant + role resolution:** `tenant-context`'s `AuthMiddleware` extracts the Bearer token,
+  verifies it against the identity JWKS via `jose` (signature + `iss`/`aud`/`exp`, RS256 pinned),
+  and runs the request inside an `AsyncLocalStorage` scope of `{tenantId, role, sub}`. There is **no
+  `X-Tenant-ID` fallback** — a missing/invalid token is `401`. Mutations are gated by `@Roles`
+  (`customer` places, `merchant` accepts/declines, `operator` for `/admin/*`).
+- **Postgres Row-Level Security (write plane):** `event_store` + `outbox` have RLS enabled +
+  forced; write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
+  set `app.tenant_id` as the first statement of each write transaction (`withTenantTransaction`), so
+  the policy `tenant_id = current_setting('app.tenant_id')` admits only that tenant's rows
+  (fail-closed when unset). The outbox-poller, migrations, and identity keep the privileged
+  superuser connection — superusers bypass RLS, so the poller still relays every tenant.
+- **Postgres key model:** events/outbox carry `tenantId`; read-model `_id` is `tenantId:orderId`,
+  inbox `_id` is `tenantId:consumer:eventId`.
 - **Kafka:** partition key `tenantId:orderId` preserves per-order ordering.
 - **Redis Cluster:** hash-tag keys co-locate a tenant's keys on one slot —
   `tenant:{id}:drivers:geo`, `tenant:{id}:order:<id>:view`. The brace wraps only the id so the key
@@ -278,18 +317,28 @@ flowchart TB
 ## 7. Frontends
 
 All four Next.js apps reuse `@flashbite/web-shared` (shadcn/ui design system on Tailwind v4,
-Manrope, the API client, `useTenantStore`, `useOrderStream` SSE hook, `DataTable`, geo + analytics
-helpers). Each app proxies `/api/read/*` -> :3002 and `/api/write/*` -> :3001 via Next rewrites
-(so the browser stays same-origin and can send `X-Tenant-ID`).
+Manrope, the API client, the **auth store** + `AuthGate`/`LoginForm`, `useOrderStream` SSE hook,
+`DataTable`, geo + analytics helpers). Each app proxies `/api/read/*` -> :3002, `/api/write/*` ->
+:3001, and `/api/identity/*` -> :3003 via Next rewrites (so the browser stays same-origin — login is
+CORS-free and the proxy forwards `Authorization` automatically).
 
-- **web-customer** — menu/cart/checkout, then a tracking page that polls until terminal status.
-- **web-merchant** — a live order table (snapshot + SSE) with accept/decline and a detail sheet.
-- **web-driver** — go online, poll `getNearbyDrivers` around the city center, render a Mapbox map +
-  table (read-only viewer; GPS comes from the script).
-- **web-admin** — cross-tenant grid: GMV/orders/cancelled/active-driver cards, four recharts charts
-  (GMV-by-tenant, status breakdown, top SKUs, GMV-over-time), two per-tenant Mapbox maps, and a
-  combined orders table with cancellation reasons. Live via one SSE connection per tenant + driver
-  polling; all analytics computed in the browser from the per-tenant fan-out.
+Every app is wrapped in an `AuthGate` (role-gated): no token shows a minimal `LoginForm` (email +
+password, with a one-click **demo-user quick-pick**); the token is stored in `localStorage`, and the
+API client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
+switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/expiry machinery yet
+(a `401` bounces back to login — backlog).
+
+- **web-customer** (`customer@<tenant>.test`) — menu/cart/checkout, then a tracking page that polls
+  until terminal status.
+- **web-merchant** (`merchant@<tenant>.test`) — a live order table (snapshot + SSE) with
+  accept/decline and a detail sheet.
+- **web-driver** (`driver@<tenant>.test`) — view nearby drivers around the token's city center,
+  rendered on a Mapbox map + table (read-only viewer; GPS comes from the script).
+- **web-admin** (`operator@flashbite.test`) — operator console: GMV/orders/cancelled/active-driver
+  cards, four recharts charts (GMV-by-tenant, status breakdown, top SKUs, GMV-over-time), two
+  per-tenant Mapbox maps, and a combined orders table with cancellation reasons. Live via one merged
+  operator SSE stream; data from the cross-tenant `/admin/orders` + `/admin/drivers` endpoints;
+  analytics computed in the browser from the combined result.
 
 ---
 
@@ -297,12 +346,16 @@ helpers). Each app proxies `/api/read/*` -> :3002 and `/api/write/*` -> :3001 vi
 
 - **Backend (Jest):** unit + e2e suites that boot the NestJS apps against live infra (Mongo, Redis
   Cluster, Redpanda, Temporal) — projection, outbox round-trip, SSE, telemetry ingest/nearby, the
-  SLA-breach saga e2e.
-- **web-shared (Vitest):** the single frontend unit-test home — API client request shapes, order
-  event helpers, geo + analytics helpers.
-- **Frontends (Playwright):** per-app e2e against the running stack (e.g. the admin e2e seeds an
-  order per tenant and asserts the cross-tenant fan-out renders). The web apps are excluded from the
-  root Jest run.
+  SLA-breach saga e2e; identity login/JWKS; the auth layer (401 no token, 403 wrong role,
+  tenant-from-token); the **RLS isolation e2e** (connected as `flashbite_app`, a cross-tenant insert
+  is blocked and cross-tenant rows are hidden); the operator console (cross-tenant `/admin/*`, 403
+  for non-operators). e2e mint tokens from a local test keypair, so identity need not run.
+- **web-shared (Vitest):** the single frontend unit-test home — auth store (login/claims), API
+  client request shapes (Bearer header), order event helpers, geo + analytics helpers.
+- **Frontends (Playwright):** per-app e2e against the running stack — log in via the demo quick-pick,
+  then drive the flow with Bearer tokens (e.g. the admin e2e seeds an order per tenant and asserts
+  the operator `/admin/*` calls render cross-tenant data). The web apps are excluded from the root
+  Jest run.
 
 ---
 
@@ -310,13 +363,17 @@ helpers). Each app proxies `/api/read/*` -> :3002 and `/api/write/*` -> :3001 vi
 
 These appear in the vision spec or `docs/superpowers/backlog.md` but are **not implemented**:
 
-- **Identity service + verified JWT, Postgres Row-Level Security** — tenancy is a trusted header
-  today (Phase 2).
 - **Avro + Schema Registry** — envelopes are currently JSON (Phase 3 hardening).
 - **Real payment provider** — charge/refund are fake Temporal activities.
 - **Driver dispatch** — closing the order↔driver loop (saga assigns a nearby driver; driver
   accept/pickup/deliver).
-- **Authenticated cross-tenant admin API** — replaces the client-side fan-out.
+- **Identity hardening** — refresh tokens, key persistence/rotation across restarts, user
+  management/signup, revocation. Phase 2 ships the core (RS256 login + JWKS + seeded users,
+  access-token-only, startup-generated keys).
 - **Telemetry-archiver + history store** — durable ping history for analytics / driver safety score.
 - **Microfrontend shell** — composing the four apps into one product shell.
 - **Push-based customer tracking** — replace the customer poll with SSE.
+
+> **Completed in Phase 2:** identity service + verified-JWT tenancy (replacing the trusted
+> `X-Tenant-ID` header), Postgres Row-Level Security on the write plane, role-based access, and the
+> authenticated cross-tenant operator API + frontend login.

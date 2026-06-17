@@ -48,14 +48,15 @@ export {
 export {
   placeOrder, getOrder, listOrders, acceptOrder, declineOrder,
   reportLocation, getNearbyDrivers,
-  type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody,
+  getAdminOrders, getAdminDrivers,
+  type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
 export {
   aggregateGmv, gmvByTenant, statusBreakdown, topSkus, gmvOverTime, orderCounts, replaceTenantOrders,
   type TenantGmv, type TenantStatusCounts, type SkuCount, type GmvBucket, type OrderCounts,
 } from "./orders/analytics";
-export { useTenantStore, TENANTS, type Tenant } from "./store/tenant-store";
+export { TENANTS, type Tenant } from "./store/tenant-store";
 export { useCartStore, type CartLine } from "./store/cart-store";
 export { type GeoPoint } from "./geo/types";
 export { CITY_CENTERS, type CityCenter } from "./geo/city-centers";
@@ -96,3 +97,6 @@ export {
   SelectItem,
   SelectSeparator,
 } from "./components/ui/select";
+export { useAuthStore, type AuthClaims } from "./store/auth-store";
+export { LoginForm, type DemoUser } from "./components/login-form";
+export { AuthGate } from "./components/auth-gate";

@@ -17,9 +17,10 @@ plane and a projected read plane, joined by Kafka):
 ```mermaid
 flowchart LR
   FE["Frontends :3100-3103<br/>customer / merchant / driver / admin"]
+  ID["identity :3003<br/>RS256 JWT + JWKS"]
   W["write-api :3001"]
   R["read-api :3002"]
-  PG[("Postgres<br/>event store + outbox")]
+  PG[("Postgres<br/>event store + outbox<br/>+ RLS")]
   OB["outbox-poller"]
   KF["Redpanda - Kafka"]
   PJ["projection-worker"]
@@ -27,8 +28,11 @@ flowchart LR
   MG[("MongoDB read model")]
   RS[("Redis Cluster<br/>cache + geo")]
 
-  FE -->|"place / accept"| W
-  FE -->|"query + SSE"| R
+  FE -->|"login"| ID
+  FE -->|"Bearer: place / accept"| W
+  FE -->|"Bearer: query + SSE"| R
+  W -.->|"verify via JWKS"| ID
+  R -.->|"verify via JWKS"| ID
   W --> PG --> OB --> KF
   KF --> PJ --> MG
   KF --> SG
@@ -59,7 +63,7 @@ flowchart LR
 > **Full architecture (components, sequence diagrams, data model):**
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**Built today (Phase 0 + 1):**
+**Built (Phase 0 + 1 + 2):**
 
 - **CQRS + Event Sourcing + Transactional Outbox** — order events + outbox row committed in one
   Postgres transaction (Prisma); forward-only, rebuildable Mongo projections.
@@ -75,14 +79,27 @@ flowchart LR
   persisted.
 - **Idempotency & dedup** — at every hop: stable `eventId`, Mongo inbox pattern, Temporal
   `WorkflowId = tenantId:orderId` reject-duplicate reuse policy.
-- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin (cross-tenant
-  analytics), on a shared design system.
+- **Identity & verified-JWT tenancy (Phase 2)** — a dedicated `identity` service issues **RS256**
+  access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
+  `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is
+  **gone** — isolation rests on cryptographic identity, not a client-supplied header.
+- **Postgres Row-Level Security (Phase 2)** — the write plane (`event_store` + `outbox`) is RLS-
+  enforced: write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
+  set `app.tenant_id` per transaction, so a tenant can never read or write another's rows even if
+  app code has a bug. The outbox-poller stays privileged (it relays every tenant).
+- **Role-based access + operator console (Phase 2)** — JWT `role` claim (`customer` / `merchant` /
+  `driver` / `admin` / `operator`) gated by a `@Roles` guard; an authenticated **cross-tenant
+  operator API** (`/admin/orders`, `/admin/drivers`, merged `/admin/orders/stream`) powers the admin
+  dashboard.
+- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin (operator
+  console), on a shared design system, with a minimal login (seeded users) sending `Authorization:
+  Bearer`.
 - **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
-  tags). Resolution is the `X-Tenant-ID` header today.
+  tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
 
-**Planned (later phases):** a dedicated **identity service + verified JWT** and **Postgres
-Row-Level Security** (Phase 2) replace the trusted header; **Avro + Schema Registry**, a real
-payment provider, and **driver dispatch** come later. See `docs/superpowers/backlog.md`.
+**Planned (later phases):** **Avro + Schema Registry** (Phase 3), a real payment provider, and
+**driver dispatch** (closing the order↔driver loop). Identity hardening (refresh tokens, key
+rotation) is backlogged. See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -92,18 +109,19 @@ vision in
 
 ## Tech stack
 
-NestJS · Next.js 16 · Kafka (Redpanda) · Temporal · PostgreSQL + Prisma · MongoDB ·
-Redis Cluster · recharts · react-map-gl · TypeScript · pnpm monorepo · Docker Compose.
-*(Schema Registry / Avro and a JWT identity service are planned, not yet wired.)*
+NestJS · Next.js 16 · Kafka (Redpanda) · Temporal · PostgreSQL + Prisma (+ Row-Level Security) ·
+MongoDB · Redis Cluster · `jose` (RS256 JWT / JWKS) · argon2 · recharts · react-map-gl ·
+TypeScript · pnpm monorepo · Docker Compose.
+*(Schema Registry / Avro is planned, not yet wired.)*
 
 ## Monorepo layout
 
 ```
-apps/        write-api, read-api, outbox-poller, projection-worker, saga-worker,
-             telemetry-worker, web-customer, web-merchant, web-driver, web-admin
-             (identity service: planned)
-packages/    contracts (event types + envelope/key helpers), shared (Prisma, Mongo,
-             Redis, event-store), tenant-context, web-shared (design system + client)
+apps/        identity (JWT/JWKS), write-api, read-api, outbox-poller, projection-worker,
+             saga-worker, telemetry-worker, web-customer, web-merchant, web-driver, web-admin
+packages/    contracts (event types + envelope/key helpers + ROLES/TENANTS), shared (Prisma,
+             Mongo, Redis, event-store, tenant-scoped tx), tenant-context (verify-JWT auth
+             context + @Roles guard), web-shared (design system + client + auth store)
 infra/       docker-compose.yml + runbook
 spikes/      Phase 0 de-risking scripts (throwaway)
 docs/        ARCHITECTURE.md, specs, per-phase plans, backlog
@@ -119,7 +137,7 @@ The master spec decomposes the build into phases, each its own plan → implemen
 |-------|------|--------|
 | **0** | Infra up + de-risk Kafka / Temporal / outbox / Redis Cluster | ✅ complete |
 | **1** | Walking skeleton end-to-end (CQRS/ES/outbox, projection, SSE, Temporal saga, telemetry) **+ all four frontends** | ✅ complete |
-| 2 | Two tenants + identity (JWT) + isolation hard mode (Postgres RLS) | planned |
+| **2** | Identity (verified JWT) + isolation hard mode (Postgres RLS) + operator console + frontend auth | ✅ complete |
 | 3 | Deepen every box to hard mode (full ES, Avro + Schema Registry, real payments, driver dispatch) | planned |
 | 4 | Frontend polish + observability story | planned |
 
@@ -127,6 +145,11 @@ Phase 1 was built in vertical slices: **1a** write path (event store + outbox), 
 (projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga, **1c-ii** driver
 telemetry (Redis geo + nearby), and **1d** the frontends — **1d-i** customer storefront,
 **1d-ii** merchant dashboard, **1d-iii** driver view, **1d-iv** cross-tenant admin grid.
+
+Phase 2 was built in slices: **2a** identity service (RS256 JWT + JWKS, seeded users), **S1**
+verified-JWT tenant/role context replacing `X-Tenant-ID` on write-api + read-api (Bearer-required
+hard cut), **S2** Postgres RLS on the write plane, **S3** the cross-tenant operator console API, and
+**S4** frontend login (Bearer everywhere, admin via the operator endpoints).
 
 ---
 
@@ -159,7 +182,7 @@ Observability UIs: Temporal at <http://localhost:8080>, Redpanda Console at
 
 ---
 
-## Run the full app (Phase 1)
+## Run the full app (Phase 1 + 2)
 
 Bring up infra, then the order pipeline and whichever frontend(s) you want — each in its own
 terminal (or background them):
@@ -185,12 +208,19 @@ pnpm dev:projection    # Kafka   -> Mongo read model
 pnpm dev:saga          # Temporal order-lifecycle workflow (charge / SLA / accept|refund)
 pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
 
-# frontends (each proxies /api/read -> :3002, /api/write -> :3001)
+# frontends (each proxies /api/identity -> :3003, /api/read -> :3002, /api/write -> :3001)
+pnpm dev:identity      # :3003  JWT identity service — MUST be running for login
 pnpm dev:web-customer  # :3100  storefront + order tracking
 pnpm dev:web-merchant  # :3101  live order queue, accept/decline
 pnpm dev:web-driver    # :3102  nearby-drivers map (needs NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
 pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 ```
+
+> **Login required (Phase 2 S4):** after `pnpm seed:users`, every UI requires a logged-in user.
+> Use seeded credentials (`role@tenant.test` / `devpassword`), e.g. `customer@berlin.test`,
+> `merchant@berlin.test`, `driver@berlin.test`; the admin dashboard uses `operator@flashbite.test`.
+> `pnpm dev:identity` must be running — each frontend reaches it same-origin via the
+> `/api/identity/*` Next.js rewrite.
 
 | Surface | URL | Surface | URL |
 |---|---|---|---|
@@ -199,10 +229,12 @@ pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 | Driver | <http://localhost:3102> | Temporal UI | <http://localhost:8080> |
 | Admin | <http://localhost:3103> | Redpanda Console | <http://localhost:8085> |
 
-Tenancy is the `X-Tenant-ID` header (`berlin` or `tokyo`); the frontends carry it for you. Maps use
-a public `NEXT_PUBLIC_MAPBOX_TOKEN` (a fallback panel renders without one). **Tests:** `pnpm test`
+Tenancy + role come from the **verified JWT** (`Authorization: Bearer`) — the frontends obtain it at
+login and send it for you; the old `X-Tenant-ID` header is no longer accepted. Maps use a public
+`NEXT_PUBLIC_MAPBOX_TOKEN` (a fallback panel renders without one). **Tests:** `pnpm test`
 (backend, needs infra up), `pnpm --filter @flashbite/web-shared test` (frontend units), and
-`pnpm test:e2e:<customer|merchant|driver|admin>` (Playwright, needs the relevant services up).
+`pnpm test:e2e:<customer|merchant|driver|admin>` (Playwright, needs the relevant services + identity
+up, users seeded).
 
 ---
 
@@ -212,22 +244,27 @@ Ephemeral driver locations stream into Redis geo and are queryable per tenant:
 
 ```bash
 pnpm infra:up
+pnpm dev:identity      # http://localhost:3003 (login + JWKS) — needed for a token
 pnpm dev:read-api      # http://localhost:3002 (location ingest + nearby query)
 pnpm dev:telemetry     # telemetry-streams → Redis geo
+pnpm seed:users        # role@tenant.test / devpassword
 
-# stream simulated GPS pings (random walk) until Ctrl+C
+# stream simulated GPS pings (random walk) until Ctrl+C — logs in for a driver JWT first
 ./scripts/stream-gps.sh
 # tune: DRIVER=drv-7 TENANT=tokyo INTERVAL=0.5 ./scripts/stream-gps.sh
 
-# …or by hand:
+# …or by hand (tenant comes from the token, not a header):
+TOKEN=$(curl -s -XPOST localhost:3003/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"driver@berlin.test","password":"devpassword"}' \
+  | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
 curl -XPOST localhost:3002/drivers/drv-1/location \
-  -H 'Content-Type: application/json' -H 'X-Tenant-ID: berlin' \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -d '{"lng":13.405,"lat":52.52}'                         # → 202
 curl "localhost:3002/drivers/nearby?lng=13.405&lat=52.52&radiusKm=5" \
-  -H 'X-Tenant-ID: berlin'                                # → nearby drivers (tenant-scoped)
+  -H "Authorization: Bearer $TOKEN"                       # → nearby drivers (tenant from token)
 ```
 
 Telemetry is **ephemeral** — Redis geospatial only, never Postgres / the event store.
-Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`). Manual
-requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
+Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`), scoped by the
+token's tenant. Manual requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
 [`docs/superpowers/plans/phase-1c-ii-verification.md`](docs/superpowers/plans/phase-1c-ii-verification.md).

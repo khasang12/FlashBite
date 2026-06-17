@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  useTenantStore, TENANTS, type Tenant,
+  AuthGate, useAuthStore,
+  type Tenant,
   CITY_CENTERS, toNearbyRows,
   Button,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
@@ -12,27 +13,22 @@ import { NearbyTable } from "@/components/nearby-table";
 
 const DRIVERS = ["drv-1", "drv-2", "drv-3", "drv-4"];
 
-export default function DriverPage() {
-  const tenant = useTenantStore((s) => s.tenant);
-  const setTenant = useTenantStore((s) => s.setTenant);
-  const [mounted, setMounted] = useState(false);
+const DRIVER_DEMOS = [
+  { label: "Berlin driver", email: "driver@berlin.test" },
+  { label: "Tokyo driver", email: "driver@tokyo.test" },
+];
+
+function DriverDashboard() {
+  const tenantId = (useAuthStore((s) => s.claims?.tenantId) ?? "berlin") as Tenant;
   const [driverId, setDriverId] = useState("drv-1");
   const [watching, setWatching] = useState(false);
 
-  useEffect(() => {
-    // Hydration-safe mount flag: the tenant store uses skipHydration, so the tenant
-    // <Select> is rendered only after rehydrate to avoid an SSR/client mismatch.
-    void useTenantStore.persist.rehydrate();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
-
-  const { nearby, reconnecting } = useNearbyWatch(tenant, watching);
+  const center = CITY_CENTERS[tenantId];
+  const { nearby, reconnecting } = useNearbyWatch(center, watching);
   // GPS is streamed externally (scripts/stream-gps.sh). The selected driver shows
   // as "you" when its ping appears in the geo index; everyone else is in the table.
   const self = nearby.find((d) => d.driverId === driverId) ?? null;
   const others = toNearbyRows(nearby, driverId);
-  const center = CITY_CENTERS[tenant];
   const mapCenter = self ? { lng: self.lng, lat: self.lat } : center;
 
   return (
@@ -52,18 +48,6 @@ export default function DriverPage() {
               ))}
             </SelectContent>
           </Select>
-          {mounted && (
-            <Select value={tenant} onValueChange={(v) => setTenant(v as Tenant)}>
-              <SelectTrigger className="w-28" aria-label="Select city">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TENANTS.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
         </div>
       </header>
 
@@ -78,7 +62,7 @@ export default function DriverPage() {
               <div>
                 <div className="font-bold">Watching — live nearby</div>
                 <div className="text-xs text-muted-foreground">
-                  {tenant} · {others.length} nearby
+                  {tenantId} · {others.length} nearby
                   {self
                     ? ` · you (${driverId}): ${self.lng.toFixed(4)}, ${self.lat.toFixed(4)}`
                     : ` · ${driverId} not streaming yet`}
@@ -118,5 +102,13 @@ export default function DriverPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DriverPage() {
+  return (
+    <AuthGate demoUsers={DRIVER_DEMOS} requiredRole="driver" title="FlashBite — Driver">
+      <DriverDashboard />
+    </AuthGate>
   );
 }
