@@ -5,6 +5,10 @@
 # ingest endpoint, which publishes a DriverTelemetryStreamed event onto the
 # telemetry-streams topic; the telemetry-worker GEOADDs it into Redis geo.
 #
+# Logs in to the identity service first to obtain a driver JWT, then sends
+# Bearer auth on every request (no X-Tenant-ID header — tenant is embedded
+# in the token via the driver's email address).
+#
 # Runs forever — press Ctrl+C to stop.
 #
 # Usage:
@@ -14,14 +18,18 @@
 #
 # Env vars (all optional):
 #   BASE_URL      read-api base URL            (default http://localhost:3002)
-#   TENANT        X-Tenant-ID header           (default berlin)
+#   IDENTITY_URL  identity service base URL    (default http://localhost:3003)
+#   TENANT        tenant slug (used to build DRIVER_EMAIL)  (default berlin)
+#   DRIVER_EMAIL  login email for the driver   (default driver@${TENANT}.test)
+#   SEED_PASSWORD password for the driver user (default devpassword)
 #   DRIVER        driver id in the path        (default drv-1)
 #   INTERVAL      seconds between pings         (default 1)
 #   LNG / LAT     starting coordinates         (default Berlin centre 13.405 / 52.52)
 #   STEP          max coord delta per tick      (default 0.0008 ~= up to ~60-90m)
 #   NEARBY_EVERY  print a /drivers/nearby count every N pings; 0 disables (default 10)
 #
-# Prereq: infra up (pnpm infra:up) + read-api (pnpm dev:read-api) + worker (pnpm dev:telemetry).
+# Prereq: infra up (pnpm infra:up) + dev:identity (pnpm dev:identity) + users seeded
+#         (pnpm seed:users) + read-api (pnpm dev:read-api) + worker (pnpm dev:telemetry).
 
 # No `set -e`: this is a long-running loop that must survive transient errors
 # (e.g. read-api momentarily down) and keep streaming until the user stops it.
@@ -29,12 +37,24 @@ set -u
 
 BASE_URL="${BASE_URL:-http://localhost:3002}"
 TENANT="${TENANT:-berlin}"
+IDENTITY_URL="${IDENTITY_URL:-http://localhost:3003}"
+DRIVER_EMAIL="${DRIVER_EMAIL:-driver@${TENANT}.test}"
+SEED_PASSWORD="${SEED_PASSWORD:-devpassword}"
 DRIVER="${DRIVER:-drv-1}"
 INTERVAL="${INTERVAL:-1}"
 LNG="${LNG:-13.405}"
 LAT="${LAT:-52.52}"
 STEP="${STEP:-0.0008}"
 NEARBY_EVERY="${NEARBY_EVERY:-10}"
+
+TOKEN="$(curl -s -X POST "${IDENTITY_URL}/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"${DRIVER_EMAIL}\",\"password\":\"${SEED_PASSWORD}\"}" \
+  | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')"
+if [ -z "$TOKEN" ]; then
+  echo "login failed for ${DRIVER_EMAIL} at ${IDENTITY_URL} — is dev:identity running + users seeded (pnpm seed:users)?" >&2
+  exit 1
+fi
 
 RESP_FILE="$(mktemp -t gps-resp.XXXXXX)"
 count=0
@@ -62,7 +82,7 @@ while true; do
   if ! http=$(curl -s -o "$RESP_FILE" -w '%{http_code}' \
       -X POST "${BASE_URL}/drivers/${DRIVER}/location" \
       -H 'Content-Type: application/json' \
-      -H "X-Tenant-ID: ${TENANT}" \
+      -H "Authorization: Bearer ${TOKEN}" \
       -d "{\"lng\":${LNG},\"lat\":${LAT}}"); then
     echo "POST failed — is read-api up on ${BASE_URL}? retrying in ${INTERVAL}s..."
     sleep "$INTERVAL"
@@ -75,7 +95,7 @@ while true; do
 
   if [ "$NEARBY_EVERY" -gt 0 ] && [ $((count % NEARBY_EVERY)) -eq 0 ]; then
     n=$(curl -s "${BASE_URL}/drivers/nearby?lng=${LNG}&lat=${LAT}&radiusKm=5" \
-        -H "X-Tenant-ID: ${TENANT}" | grep -o '"driverId"' | wc -l | tr -d ' ')
+        -H "Authorization: Bearer ${TOKEN}" | grep -o '"driverId"' | wc -l | tr -d ' ')
     echo "    -> nearby within 5km (${TENANT}): ${n} driver(s)"
   fi
 
