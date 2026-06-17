@@ -3,7 +3,6 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   useCartStore,
-  useTenantStore,
   placeOrder,
   Button,
   Input,
@@ -16,7 +15,6 @@ const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 
 export default function Checkout() {
   const router = useRouter();
-  const tenant = useTenantStore((s) => s.tenant);
   const items = useCartStore((s) => s.items);
   const total = useCartStore((s) => s.totalCents());
   const clear = useCartStore((s) => s.clear);
@@ -32,7 +30,7 @@ export default function Checkout() {
     setError(null);
     try {
       const orderId = crypto.randomUUID();
-      await placeOrder(tenant, {
+      await placeOrder({
         orderId,
         customerId: name.trim() || "guest",
         items: items.map((l) => ({ sku: l.sku, qty: l.qty, price: l.priceCents })),
