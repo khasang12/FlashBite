@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import type { OrderStreamEvent } from "./order-events";
+import { useAuthStore } from "../store/auth-store";
 
 /** Pure parser for one SSE `data` payload. Exported for tests. */
 export function parseStreamData(data: string): OrderStreamEvent | null {
@@ -17,25 +18,29 @@ export function parseStreamData(data: string): OrderStreamEvent | null {
 }
 
 /**
- * Subscribes to the merchant SSE stream via the same-origin rewrite. Uses
- * fetch-based SSE (not EventSource) so the X-Tenant-ID header can be sent.
+ * Subscribes to an order SSE stream via the same-origin rewrite. Uses
+ * fetch-based SSE (not EventSource) so the Authorization header can be sent.
  * Calls `onEvent` for each parsed event; auto-reconnects; `onOpen` fires on
  * (re)connect so the caller can resync the list.
+ * Pass `path` to point at the admin cross-tenant stream instead of the default
+ * merchant stream.
  */
 export function useOrderStream(
-  tenantId: string,
   onEvent: (e: OrderStreamEvent) => void,
   onOpen?: () => void,
+  path = "/api/read/merchant/orders/stream",
 ): void {
   const onEventRef = useRef(onEvent);
   const onOpenRef = useRef(onOpen);
   onEventRef.current = onEvent;
   onOpenRef.current = onOpen;
+  const token = useAuthStore((s) => s.token);
 
   useEffect(() => {
+    if (!token) return;
     const ctrl = new AbortController();
-    void fetchEventSource("/api/read/merchant/orders/stream", {
-      headers: { "X-Tenant-ID": tenantId },
+    void fetchEventSource(path, {
+      headers: { Authorization: `Bearer ${token}` },
       signal: ctrl.signal,
       openWhenHidden: true,
       onopen: async (_response: Response) => { onOpenRef.current?.(); },
@@ -45,5 +50,5 @@ export function useOrderStream(
       },
     }).catch(() => { /* aborted on unmount */ });
     return () => ctrl.abort();
-  }, [tenantId]);
+  }, [token, path]);
 }
