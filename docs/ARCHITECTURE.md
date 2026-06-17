@@ -274,12 +274,12 @@ sequenceDiagram
   participant ID as identity :3003
   participant API as write-api / read-api
   FE->>ID: POST /auth/login (email, password)
-  ID->>ID: argon2id verify; look up tenantId + role
+  ID->>ID: argon2id verify, resolve tenant and role
   ID-->>FE: RS256 JWT (sub, tenantId, role, iss, aud, exp)
-  FE->>API: request + Authorization Bearer jwt
+  FE->>API: request with Authorization Bearer jwt
   API->>ID: GET /.well-known/jwks.json (cached, by kid)
-  API->>API: verify sig + iss/aud/exp, scope tenantId+role+sub
-  Note over API: Roles guard 403 on mismatch; 401 if no/invalid token
+  API->>API: verify signature, iss, aud, exp, then scope tenant role sub
+  Note over API: Roles guard - 403 on role mismatch, 401 if no or invalid token
 ```
 
 - **Tenant + role resolution:** `tenant-context`'s `AuthMiddleware` extracts the Bearer token,
