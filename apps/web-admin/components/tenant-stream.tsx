@@ -1,14 +1,16 @@
 "use client";
-import { useOrderStream, type OrderStreamEvent, type Tenant } from "@flashbite/web-shared";
+import { useOrderStream, type OrderStreamEvent } from "@flashbite/web-shared";
 
-/** Opens one live order SSE connection for a single tenant. Renders nothing. */
-export function TenantStream({
-  tenant, onEvent, onResync,
+const ADMIN_STREAM_PATH = "/api/read/admin/orders/stream";
+
+/** Opens ONE merged operator SSE stream covering all tenants. Renders nothing. */
+export function AdminStream({
+  onEvent,
+  onResync,
 }: {
-  tenant: Tenant;
   onEvent: (e: OrderStreamEvent) => void;
   onResync: () => void;
 }) {
-  useOrderStream(tenant, onEvent, onResync);
+  useOrderStream(onEvent, onResync, ADMIN_STREAM_PATH);
   return null;
 }

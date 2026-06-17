@@ -1,22 +1,20 @@
 "use client";
 import { useState } from "react";
-import { TENANTS, CITY_CENTERS, Input, type Tenant } from "@flashbite/web-shared";
+import { AuthGate, TENANTS, CITY_CENTERS, Input, type Tenant } from "@flashbite/web-shared";
 import { useAdminData } from "@/hooks/use-admin-data";
-import { TenantStream } from "@/components/tenant-stream";
+import { AdminStream } from "@/components/tenant-stream";
 import { StatCards } from "@/components/stat-cards";
 import { GmvByTenantChart, StatusBreakdownChart, TopSkusChart, GmvOverTimeChart } from "@/components/charts";
 import { TenantMap } from "@/components/tenant-map";
 import { AdminOrdersTable } from "@/components/admin-orders-table";
 
-export default function AdminPage() {
+function Dashboard() {
   const { orders, driversByTenant, errors, handleEvent, resync } = useAdminData();
   const [filter, setFilter] = useState("");
 
   return (
     <div className="min-h-screen bg-background">
-      {TENANTS.map((t: Tenant) => (
-        <TenantStream key={t} tenant={t} onEvent={(e) => handleEvent(t, e)} onResync={() => resync(t)} />
-      ))}
+      <AdminStream onEvent={handleEvent} onResync={resync} />
 
       <header className="flex items-center justify-between border-b px-6 py-4">
         <div className="text-lg font-extrabold">flashbite <span className="text-muted-foreground font-semibold">admin</span></div>
@@ -58,5 +56,17 @@ export default function AdminPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <AuthGate
+      demoUsers={[{ label: "Operator", email: "operator@flashbite.test" }]}
+      requiredRole="operator"
+      title="FlashBite — Operator"
+    >
+      <Dashboard />
+    </AuthGate>
   );
 }
