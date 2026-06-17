@@ -1,20 +1,25 @@
-import { test, expect, request } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { apiToken, loginViaUI } from "./auth";
 
 const WRITE_API = "http://localhost:3001";
 
-test("admin grid fans out across tenants and renders cards, charts, maps, table", async ({ page }) => {
+test("admin grid fans out across tenants and renders cards, charts, maps, table", async ({
+  page,
+  request,
+}) => {
   // Seed one order per tenant so charts/table have data (write-api → projection → read model).
-  const api = await request.newContext();
-  try {
-    for (const tenant of ["berlin", "tokyo"]) {
-      const res = await api.post(`${WRITE_API}/orders`, {
-        headers: { "X-Tenant-ID": tenant, "Content-Type": "application/json" },
-        data: { orderId: crypto.randomUUID(), customerId: "e2e-admin", items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200 },
-      });
-      expect(res.status()).toBe(201);
-    }
-  } finally {
-    await api.dispose();
+  const berlinToken = await apiToken(request, "customer@berlin.test");
+  const tokyoToken = await apiToken(request, "customer@tokyo.test");
+
+  for (const [token] of [
+    [berlinToken],
+    [tokyoToken],
+  ] as [string][]) {
+    const res = await request.post(`${WRITE_API}/orders`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: { orderId: crypto.randomUUID(), customerId: "e2e-admin", items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200 },
+    });
+    expect(res.status()).toBe(201);
   }
 
   // Count distinct nearby fan-out calls (one per tenant — berlin & tokyo have distinct coords).
@@ -25,7 +30,7 @@ test("admin grid fans out across tenants and renders cards, charts, maps, table"
     }
   });
 
-  await page.goto("/");
+  await loginViaUI(page, "Operator");
 
   // Fan-out: a nearby query for each of the two tenants.
   await expect.poll(() => fanned.size, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);

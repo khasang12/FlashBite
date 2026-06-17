@@ -1,6 +1,8 @@
 import { test, expect, request } from "@playwright/test";
+import { apiToken, loginViaUI } from "./auth";
 
 const WRITE_API = "http://localhost:3001";
+const READ_API = "http://localhost:3002";
 
 /**
  * Selector notes (verified against real DOM):
@@ -15,8 +17,9 @@ const WRITE_API = "http://localhost:3001";
 
 test("place an order and see it reach PLACED, then ACCEPTED after merchant accept", async ({
   page,
+  request,
 }) => {
-  await page.goto("/");
+  await loginViaUI(page, "Berlin customer");
 
   // Add "Pizza Margherita" from the "All items" grid (aria-label on Button size="icon")
   await page.getByRole("button", { name: /add Pizza Margherita/i }).click();
@@ -33,48 +36,40 @@ test("place an order and see it reach PLACED, then ACCEPTED after merchant accep
   await expect(page.getByText("PLACED")).toBeVisible({ timeout: 30_000 });
 
   // Merchant accept via write-api signals the saga workflow -> ACCEPTED
-  const api = await request.newContext();
-  try {
-    const res = await api.post(`${WRITE_API}/orders/${orderId}/accept`, {
-      headers: { "X-Tenant-ID": "berlin" },
-    });
-    expect(res.status()).toBe(202);
-  } finally {
-    await api.dispose();
-  }
+  const merchantToken = await apiToken(request, "merchant@berlin.test");
+  const res = await request.post(`${WRITE_API}/orders/${orderId}/accept`, {
+    headers: { Authorization: `Bearer ${merchantToken}` },
+  });
+  expect(res.status()).toBe(202);
 
   await expect(page.getByText("ACCEPTED")).toBeVisible({ timeout: 45_000 });
 });
 
-test("tenant isolation: a berlin order is not visible to tokyo", async () => {
+test("tenant isolation: a berlin order is not visible to tokyo", async ({ request }) => {
   const orderId = crypto.randomUUID();
 
-  const write = await request.newContext({ baseURL: "http://localhost:3001" });
-  try {
-    const created = await write.post("/orders", {
-      headers: { "X-Tenant-ID": "berlin", "Content-Type": "application/json" },
-      data: { orderId, customerId: "iso-test", items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200 },
+  const berlinToken = await apiToken(request, "customer@berlin.test");
+  const created = await request.post(`${WRITE_API}/orders`, {
+    headers: { Authorization: `Bearer ${berlinToken}`, "Content-Type": "application/json" },
+    data: { orderId, customerId: "iso-test", items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200 },
+  });
+  expect(created.status()).toBe(201);
+
+  // berlin sees the order once the projection catches up (poll briefly)
+  let berlinStatus = 0;
+  for (let i = 0; i < 20 && berlinStatus !== 200; i++) {
+    const r = await request.get(`${READ_API}/orders/${orderId}`, {
+      headers: { Authorization: `Bearer ${berlinToken}` },
     });
-    expect(created.status()).toBe(201);
-  } finally {
-    await write.dispose();
+    berlinStatus = r.status();
+    if (berlinStatus !== 200) await new Promise((res) => setTimeout(res, 1000));
   }
+  expect(berlinStatus).toBe(200);
 
-  const read = await request.newContext({ baseURL: "http://localhost:3002" });
-  try {
-    // berlin sees the order once the projection catches up (poll briefly)
-    let berlinStatus = 0;
-    for (let i = 0; i < 20 && berlinStatus !== 200; i++) {
-      const r = await read.get(`/orders/${orderId}`, { headers: { "X-Tenant-ID": "berlin" } });
-      berlinStatus = r.status();
-      if (berlinStatus !== 200) await new Promise((res) => setTimeout(res, 1000));
-    }
-    expect(berlinStatus).toBe(200);
-
-    // tokyo must NOT see the berlin order
-    const tokyo = await read.get(`/orders/${orderId}`, { headers: { "X-Tenant-ID": "tokyo" } });
-    expect(tokyo.status()).toBe(404);
-  } finally {
-    await read.dispose();
-  }
+  // tokyo must NOT see the berlin order
+  const tokyoToken = await apiToken(request, "customer@tokyo.test");
+  const tokyo = await request.get(`${READ_API}/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${tokyoToken}` },
+  });
+  expect(tokyo.status()).toBe(404);
 });

@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { loginViaUI } from "./auth";
 
 test("not watching by default — no nearby section until started", async ({ page }) => {
-  await page.goto("/");
+  await loginViaUI(page, "Berlin driver");
   await expect(
     page.getByText("Not watching — start to see nearby drivers (stream GPS via scripts/stream-gps.sh)."),
   ).toBeVisible();
@@ -10,7 +11,7 @@ test("not watching by default — no nearby section until started", async ({ pag
 });
 
 test("starting watch queries nearby (200) and shows the nearby section", async ({ page }) => {
-  await page.goto("/");
+  await loginViaUI(page, "Berlin driver");
 
   const nearbyReq = page.waitForResponse(
     (r) =>
