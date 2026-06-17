@@ -1,124 +1,180 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { placeOrder, getOrder, listOrders, acceptOrder, declineOrder, reportLocation, getNearbyDrivers, type PlaceOrderRequest } from "./client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAuthStore } from "../store/auth-store";
+import {
+  acceptOrder,
+  declineOrder,
+  getAdminDrivers,
+  getAdminOrders,
+  getNearbyDrivers,
+  getOrder,
+  listOrders,
+  placeOrder,
+  reportLocation,
+  type PlaceOrderRequest,
+} from "./client";
+
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  useAuthStore.setState({ token: "test-token", claims: { sub: "u", tenantId: "berlin", role: "customer" } });
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+const lastCall = () => fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+const lastUrl = () => lastCall()[0] as string;
+const lastHeaders = () => ((lastCall()[1] as RequestInit).headers ?? {}) as Record<string, string>;
 
 describe("api client", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  it("placeOrder POSTs to the write proxy with the tenant header and body", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ orderId: "o-1" }), { status: 201 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+  it("placeOrder sends Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ orderId: "o-1" }), { status: 201 }));
 
     const req: PlaceOrderRequest = {
-      orderId: "o-1", customerId: "alice",
-      items: [{ sku: "pizza", qty: 1, price: 1200 }], totalAmount: 1200,
+      orderId: "o-1",
+      customerId: "alice",
+      items: [{ sku: "pizza", qty: 1, price: 1200 }],
+      totalAmount: 1200,
     };
-    const res = await placeOrder("berlin", req);
+    const res = await placeOrder(req);
 
     expect(res).toEqual({ orderId: "o-1" });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/write/orders");
-    expect(init.method).toBe("POST");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
-    expect(init.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(init.body)).toEqual(req);
+    expect(lastUrl()).toBe("/api/write/orders");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+    expect(lastHeaders()["Content-Type"]).toBe("application/json");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual(req);
   });
 
-  it("getOrder GETs the read proxy with the tenant header", async () => {
-    const view = { tenantId: "berlin", orderId: "o-1", customerId: "alice", items: [], totalAmount: 1200, status: "PLACED", version: 1, updatedAt: "t" };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+  it("getOrder GETs the read proxy with Bearer, no X-Tenant-ID", async () => {
+    const view = {
+      tenantId: "berlin",
+      orderId: "o-1",
+      customerId: "alice",
+      items: [],
+      totalAmount: 1200,
+      status: "PLACED",
+      version: 1,
+      updatedAt: "t",
+    };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
 
-    const res = await getOrder("berlin", "o-1");
+    const res = await getOrder("o-1");
+
     expect(res).toEqual(view);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/read/orders/o-1");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+    expect(lastUrl()).toBe("/api/read/orders/o-1");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
   it("getOrder returns null on 404", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
-    expect(await getOrder("berlin", "missing")).toBeNull();
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    expect(await getOrder("missing")).toBeNull();
   });
 
-  it("listOrders GETs the merchant list with the tenant header", async () => {
-    const rows = [{ orderId: "o-1", tenantId: "berlin", customerId: "a", items: [], totalAmount: 0, status: "PLACED", version: 1, updatedAt: "t" }];
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-    const res = await listOrders("berlin");
+  it("listOrders GETs the merchant list with Bearer, no X-Tenant-ID", async () => {
+    const rows = [
+      { orderId: "o-1", tenantId: "berlin", customerId: "a", items: [], totalAmount: 0, status: "PLACED", version: 1, updatedAt: "t" },
+    ];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+
+    const res = await listOrders();
+
     expect(res).toEqual(rows);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/read/merchant/orders");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+    expect(lastUrl()).toBe("/api/read/merchant/orders");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
-  it("acceptOrder POSTs the accept signal with the tenant header", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 202 }));
-    vi.stubGlobal("fetch", fetchMock);
-    await acceptOrder("berlin", "o-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/write/orders/o-1/accept");
-    expect(init.method).toBe("POST");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+  it("acceptOrder POSTs the accept signal with Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+
+    await acceptOrder("o-1");
+
+    expect(lastUrl()).toBe("/api/write/orders/o-1/accept");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
-  it("declineOrder POSTs the decline signal", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 202 }));
-    vi.stubGlobal("fetch", fetchMock);
-    await declineOrder("berlin", "o-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/write/orders/o-1/decline");
-    expect(init.method).toBe("POST");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
+  it("declineOrder POSTs the decline signal with Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+
+    await declineOrder("o-1");
+
+    expect(lastUrl()).toBe("/api/write/orders/o-1/decline");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
-  it("reportLocation POSTs to the read proxy with the tenant header and body", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+  it("reportLocation POSTs to the read proxy with Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }));
 
-    const res = await reportLocation("berlin", "drv-1", { lng: 13.4, lat: 52.5 });
+    const res = await reportLocation("drv-1", { lng: 13.4, lat: 52.5 });
 
     expect(res).toEqual({ driverId: "drv-1" });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/read/drivers/drv-1/location");
-    expect(init.method).toBe("POST");
-    expect(init.headers["X-Tenant-ID"]).toBe("berlin");
-    expect(init.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(init.body)).toEqual({ lng: 13.4, lat: 52.5 });
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/location");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+    expect(lastHeaders()["Content-Type"]).toBe("application/json");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ lng: 13.4, lat: 52.5 });
   });
 
   it("reportLocation includes orderId when provided", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }));
-    vi.stubGlobal("fetch", fetchMock);
-    await reportLocation("berlin", "drv-1", { lng: 1, lat: 2, orderId: "o-9" });
-    const [, init] = fetchMock.mock.calls[0];
-    expect(JSON.parse(init.body)).toEqual({ lng: 1, lat: 2, orderId: "o-9" });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1" }), { status: 202 }));
+
+    await reportLocation("drv-1", { lng: 1, lat: 2, orderId: "o-9" });
+
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ lng: 1, lat: 2, orderId: "o-9" });
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
-  it("getNearbyDrivers GETs the nearby query with coords + radius and tenant header", async () => {
+  it("getNearbyDrivers GETs nearby with coords + radius, Bearer, no X-Tenant-ID", async () => {
     const rows = [{ driverId: "drv-7", distanceKm: 0.4, lng: 13.41, lat: 52.53 }];
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
 
-    const res = await getNearbyDrivers("tokyo", 139.7, 35.68, 5);
+    const res = await getNearbyDrivers(139.7, 35.68, 5);
 
     expect(res).toEqual(rows);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/read/drivers/nearby?lng=139.7&lat=35.68&radiusKm=5");
-    expect(init.headers["X-Tenant-ID"]).toBe("tokyo");
+    expect(lastUrl()).toBe("/api/read/drivers/nearby?lng=139.7&lat=35.68&radiusKm=5");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
   it("getNearbyDrivers defaults radiusKm to 5", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-    await getNearbyDrivers("berlin", 13.4, 52.5);
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/read/drivers/nearby?lng=13.4&lat=52.5&radiusKm=5");
+    fetchMock.mockResolvedValue(new Response("[]", { status: 200 }));
+
+    await getNearbyDrivers(13.4, 52.5);
+
+    expect(lastUrl()).toBe("/api/read/drivers/nearby?lng=13.4&lat=52.5&radiusKm=5");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+  });
+
+  it("getAdminOrders hits /api/read/admin/orders with Bearer, no X-Tenant-ID", async () => {
+    const rows = [
+      { orderId: "o-2", tenantId: "tokyo", customerId: "b", items: [], totalAmount: 500, status: "PLACED", version: 1, updatedAt: "t" },
+    ];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+
+    const res = await getAdminOrders();
+
+    expect(res).toEqual(rows);
+    expect(lastUrl()).toBe("/api/read/admin/orders");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+  });
+
+  it("getAdminDrivers hits /api/read/admin/drivers with Bearer, no X-Tenant-ID", async () => {
+    const rows = [{ driverId: "drv-9", distanceKm: 1.2, lng: 139.7, lat: 35.6, tenantId: "tokyo" }];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+
+    const res = await getAdminDrivers();
+
+    expect(res).toEqual(rows);
+    expect(lastUrl()).toBe("/api/read/admin/drivers");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 });
