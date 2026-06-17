@@ -185,12 +185,19 @@ pnpm dev:projection    # Kafka   -> Mongo read model
 pnpm dev:saga          # Temporal order-lifecycle workflow (charge / SLA / accept|refund)
 pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
 
-# frontends (each proxies /api/read -> :3002, /api/write -> :3001)
+# frontends (each proxies /api/identity -> :3003, /api/read -> :3002, /api/write -> :3001)
+pnpm dev:identity      # :3003  JWT identity service — MUST be running for login
 pnpm dev:web-customer  # :3100  storefront + order tracking
 pnpm dev:web-merchant  # :3101  live order queue, accept/decline
 pnpm dev:web-driver    # :3102  nearby-drivers map (needs NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
 pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 ```
+
+> **Login required (Phase 2 S4):** after `pnpm seed:users`, every UI requires a logged-in user.
+> Use seeded credentials (`role@tenant.test` / `devpassword`), e.g. `customer@berlin.test`,
+> `merchant@berlin.test`, `driver@berlin.test`; the admin dashboard uses `operator@flashbite.test`.
+> `pnpm dev:identity` must be running — each frontend reaches it same-origin via the
+> `/api/identity/*` Next.js rewrite.
 
 | Surface | URL | Surface | URL |
 |---|---|---|---|
