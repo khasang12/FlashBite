@@ -48,7 +48,8 @@ export {
 export {
   placeOrder, getOrder, listOrders, acceptOrder, declineOrder,
   reportLocation, getNearbyDrivers,
-  type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody,
+  getAdminOrders, getAdminDrivers,
+  type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
 export {
@@ -96,3 +97,6 @@ export {
   SelectItem,
   SelectSeparator,
 } from "./components/ui/select";
+export { useAuthStore, type AuthClaims } from "./store/auth-store";
+export { LoginForm, type DemoUser } from "./components/login-form";
+export { AuthGate } from "./components/auth-gate";
