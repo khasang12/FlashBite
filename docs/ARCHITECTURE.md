@@ -19,56 +19,54 @@ Postgres / MongoDB / Redis Cluster / Redpanda (Kafka) / Temporal. It is **CQRS**
 **verified RS256 JWT** (from the `identity` service); tenant + role come from the token, not a
 trusted header.
 
-```mermaid
-flowchart LR
-  subgraph FE["Frontends - Next.js 16 + web-shared"]
-    C["web-customer :3100"]
-    M["web-merchant :3101"]
-    D["web-driver :3102"]
-    A["web-admin :3103"]
-  end
-
-  subgraph API["API tier - NestJS"]
-    ID["identity :3003 - RS256 JWT + JWKS"]
-    W["write-api :3001"]
-    R["read-api :3002"]
-  end
-
-  subgraph WORK["Workers - plain TS"]
-    OB["outbox-poller"]
-    PJ["projection-worker"]
-    SG["saga-worker - Temporal"]
-    TM["telemetry-worker"]
-  end
-
-  subgraph DATA["Infrastructure"]
-    PG[("Postgres - event store + outbox + RLS")]
-    MG[("MongoDB - read models + inbox")]
-    RS[("Redis Cluster - cache + geo")]
-    KF["Redpanda - Kafka"]
-    TP["Temporal"]
-  end
-
-  FE -->|"login"| ID
-  W -.->|"verify via JWKS"| ID
-  R -.->|"verify via JWKS"| ID
-  C -->|"Bearer: place / track"| W
-  C -->|"Bearer: GET order"| R
-  M -->|"Bearer: accept / decline"| W
-  M -->|"Bearer: orders + SSE"| R
-  D -->|"Bearer: location / nearby"| R
-  A -->|"Bearer operator: /admin/*"| R
-
-  W --> PG
-  PG --> OB --> KF
-  KF --> PJ --> MG
-  KF --> SG
-  SG <--> TP
-  SG -->|"append accept / cancel events"| PG
-  W -->|"merchant signal"| TP
-  R --> MG
-  R --> RS
-  KF --> TM --> RS
+```text
++-- Frontends (Next.js 16 + web-shared) --+
+|  web-customer :3100                      |
+|  web-merchant :3101                      |
+|  web-driver   :3102                      |
+|  web-admin    :3103                      |
++------------------------------------------+
+     |   (all frontends)          |
+     | login                      |
+     v                            |
++-- API tier (NestJS) ----------------------+
+| identity :3003 (RS256 JWT + JWKS)         |<---..(verify via JWKS)..-- write-api
+|                                           |<---..(verify via JWKS)..-- read-api
+| write-api :3001                           |
+|   web-customer --> Bearer: place / track  |
+|   web-merchant --> Bearer: accept/decline |
+|                                           |
+| read-api :3002                            |
+|   web-customer --> Bearer: GET order      |
+|   web-merchant --> Bearer: orders + SSE   |
+|   web-driver   --> Bearer: location/nearby|
+|   web-admin    --> Bearer operator:/admin*|
++-------------------------------------------+
+       |                      |
+       | write-api            | read-api
+       v                      v
++-- Infrastructure -------+  +------------------+
+| Postgres                |  | MongoDB           |
+| (event store + outbox   |  | (read models +    |
+|  + RLS)                 |  |  inbox)           |
+|   |                     |  +------------------+
+|   v                     |          ^
+| outbox-poller           |          | projection-worker
+|   |                     |  +------------------+
+|   v                     |  | Redis Cluster     |
+| Redpanda / Kafka        |  | (cache + geo)     |
+|   |     |       |       |  +------------------+
+|   v     v       v       |          ^
+| proj  saga    telemetry-+-->--------+
+| worker worker   worker  |
+|         |               |
+|         <--> Temporal   |
+|         |               |
+|         | append accept/cancel events
+|         v               |
+|       Postgres          |
+|   write-api --> merchant signal --> Temporal
++-------------------------+
 ```
 
 **Two independent planes:**
@@ -114,68 +112,54 @@ Placing an order writes one event atomically with an outbox row; the outbox poll
 two consumers react independently — the projection updates the read model, the saga drives the
 business workflow.
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Cust as web-customer
-  participant W as write-api
-  participant PG as Postgres
-  participant OB as outbox-poller
-  participant KF as Kafka
-  participant PJ as projection-worker
-  participant MG as MongoDB
-  participant SG as saga-worker
-  participant TP as Temporal
-
-  Cust->>W: POST /orders
-  W->>PG: append OrderPlaced + outbox row (one tx)
-  W-->>Cust: 201 orderId
-  OB->>PG: poll unpublished
-  OB->>KF: publish OrderPlaced (key tenantId:orderId)
-  par read model
-    KF->>PJ: OrderPlaced
-    PJ->>MG: upsert order (status PLACED)
-  and saga
-    KF->>SG: OrderPlaced
-    SG->>TP: start workflow id tenantId:orderId
-    TP->>SG: chargePayment (fake)
-  end
+```text
+web-customer    write-api      Postgres    outbox-poller    Kafka      projection-worker   MongoDB    saga-worker   Temporal
+     |               |             |              |            |               |               |            |            |
+  1. |--POST /orders->|             |              |            |               |               |            |            |
+  2. |               |--append OrderPlaced + outbox row (one tx)->|            |               |            |            |
+  3. |<--201 orderId--|             |              |            |               |               |            |            |
+  4. |               |             |<--poll unpublished--------|               |               |            |            |
+  5. |               |             |              |--publish OrderPlaced (key tenantId:orderId)->            |            |
+     |               |             |              |            |               |               |            |            |
+     |               |             |  -- read model branch --  |               |               |            |            |
+  6. |               |             |              |            |--OrderPlaced->|               |            |            |
+  7. |               |             |              |            |               |--upsert order (status PLACED)->|         |
+     |               |             |              |            |               |               |            |            |
+     |               |             |  -- saga branch ---------  |              |               |            |            |
+  8. |               |             |              |            |--OrderPlaced-------------------------->|   |            |
+  9. |               |             |              |            |               |               |--start workflow id tenantId:orderId->|
+ 10. |               |             |              |            |               |               |            |<--chargePayment (fake)|
 ```
 
 Then the workflow waits, racing a per-tenant SLA timer against the merchant's decision:
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Merch as web-merchant
-  participant W as write-api
-  participant TP as Temporal
-  participant SG as saga-worker
-  participant PG as Postgres
-  participant KF as Kafka
-  participant PJ as projection-worker
-  participant MG as MongoDB
-  participant R as read-api
+```text
+[ Temporal: workflow racing SLA timer vs merchant signal ]
 
-  Note over TP: workflow racing SLA timer vs merchant signal
-  alt accepted in time
-    Merch->>W: POST /orders/:id/accept
-    W->>TP: signal merchantApproval(true)
-    TP->>SG: recordOrderAccepted
-    SG->>PG: append OrderAccepted
-  else declined
-    Merch->>W: POST /orders/:id/decline
-    W->>TP: signal merchantApproval(false)
-    TP->>SG: refund + recordOrderCancelled(DECLINED)
-    SG->>PG: append OrderCancelled(reason)
-  else SLA breach (no signal)
-    TP->>SG: refund + recordOrderCancelled(SLA_BREACH)
-    SG->>PG: append OrderCancelled(reason)
-  end
-  PG->>KF: (via outbox) OrderAccepted / OrderCancelled
-  KF->>PJ: event
-  PJ->>MG: update status (+ cancelReason)
-  R-->>Merch: live update via SSE
+web-merchant   write-api    Temporal    saga-worker   Postgres    Kafka    projection-worker   MongoDB    read-api
+     |              |            |            |            |          |            |               |           |
+     |              |            |            |            |          |            |               |           |
+  -- [alt: accepted in time] -----------------------------------------------------------------------         |
+  1. |--POST /orders/:id/accept->|            |            |          |            |               |           |
+  2. |              |--signal merchantApproval(true)-->|   |          |            |               |           |
+  3. |              |            |--recordOrderAccepted->| |          |            |               |           |
+  4. |              |            |            |--append OrderAccepted->|           |               |           |
+     |              |            |            |            |          |            |               |           |
+  -- [else: declined] ---------------------------------------------------------------------------             |
+  1. |--POST /orders/:id/decline->|           |            |          |            |               |           |
+  2. |              |--signal merchantApproval(false)->|   |          |            |               |           |
+  3. |              |            |--refund + recordOrderCancelled(DECLINED)-->|    |               |           |
+  4. |              |            |            |--append OrderCancelled(reason)->|  |               |           |
+     |              |            |            |            |          |            |               |           |
+  -- [else: SLA breach (no signal)] --------------------------------------------------------------------      |
+  1. |              |            |--refund + recordOrderCancelled(SLA_BREACH)-->|  |               |           |
+  2. |              |            |            |--append OrderCancelled(reason)->|  |               |           |
+     |              |            |            |            |          |            |               |           |
+  -- [end alt] -- (common path) ----------------------------------------------------------------              |
+  5. |              |            |            |            |--(via outbox) OrderAccepted/Cancelled->           |
+  6. |              |            |            |            |          |--event-->  |               |           |
+  7. |              |            |            |            |          |            |--update status (+ cancelReason)->|
+  8. |<-----------------------------------------live update via SSE--------------------------------|           |
 ```
 
 **Order status:** `PLACED -> ACCEPTED` or `PLACED -> CANCELLED` (`cancelReason` =
@@ -197,25 +181,22 @@ sequenceDiagram
 
 ## 4. Read plane (CQRS query side)
 
-```mermaid
-flowchart LR
-  subgraph Clients
-    M["web-merchant"]
-    Cu["web-customer"]
-    Ad["web-admin"]
-  end
-  R["read-api :3002"]
-  MG[("MongoDB orders")]
-  RS[("Redis cache-aside")]
-  KF["Kafka order-events"]
-
-  Cu -->|"GET /orders/:id"| R
-  M -->|"GET /merchant/orders"| R
-  M -->|"GET /merchant/orders/stream (SSE)"| R
-  Ad -->|"operator: GET /admin/orders|drivers|stream"| R
-  R -->|"cache-aside (10s TTL)"| RS
-  R --> MG
-  KF -->|"read-api-sse consumer"| R
+```text
++-- Clients --------------------------+
+|  web-customer  -GET /orders/:id---->|
+|                                     |
+|  web-merchant  -GET /merchant/orders------------->|
+|                -GET /merchant/orders/stream (SSE)->|
+|                                     |              |
+|  web-admin  -operator: GET /admin/orders|drivers|stream->|
++-------------------------------------+              |
+                                                     v
+                                             read-api :3002
+                                            /        |      \
+                            cache-aside    /         |       \ read-api-sse
+                             (10s TTL)   v          v         consumer
+                           Redis      MongoDB    <-- Kafka order-events
+                          (cache)     (orders)
 ```
 
 - **Cache-aside:** `GET /orders/:id` checks Redis (`tenant:{id}:order:<id>:view`, 10s TTL) before
@@ -235,21 +216,31 @@ flowchart LR
 
 ## 5. Telemetry plane (ephemeral geo)
 
-```mermaid
-flowchart LR
-  SC["scripts/stream-gps.sh<br/>or web-driver"]
-  R["read-api :3002"]
-  KF["Kafka telemetry-streams"]
-  TM["telemetry-worker"]
-  RS[("Redis Cluster geo")]
-  Q["web-driver / web-admin"]
-
-  SC -->|"POST /drivers/:id/location"| R
-  R -->|"publish DriverTelemetryStreamed"| KF
-  KF --> TM
-  TM -->|"GEOADD tenant:{id}:drivers:geo"| RS
-  Q -->|"GET /drivers/nearby (lng,lat,radiusKm)"| R
-  R -->|"GEOSEARCH (tenant-scoped)"| RS
+```text
+scripts/stream-gps.sh (or web-driver)
+  |
+  | POST /drivers/:id/location (Bearer)
+  v
+read-api :3002
+  |
+  | publish DriverTelemetryStreamed
+  v
+Kafka telemetry-streams
+  |
+  v
+telemetry-worker
+  |
+  | GEOADD tenant:{id}:drivers:geo
+  v
+Redis Cluster geo
+  ^
+  | GEOSEARCH (tenant-scoped)
+  |
+read-api :3002
+  ^
+  | GET /drivers/nearby (lng,lat,radiusKm)
+  |
+web-driver / web-admin
 ```
 
 Driver GPS is **simulated** (random-walk via `scripts/stream-gps.sh`, or the in-app emitter was
@@ -267,19 +258,24 @@ Two tenants exist — **berlin** and **tokyo** — to prove isolation. Isolation
 
 **Identity & token flow (Phase 2):**
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant FE as Frontend
-  participant ID as identity :3003
-  participant API as write-api / read-api
-  FE->>ID: POST /auth/login (email, password)
-  ID->>ID: argon2id verify; look up tenantId + role
-  ID-->>FE: RS256 JWT (sub, tenantId, role, iss, aud, exp)
-  FE->>API: request + Authorization Bearer jwt
-  API->>ID: GET /.well-known/jwks.json (cached, by kid)
-  API->>API: verify sig + iss/aud/exp, scope tenantId+role+sub
-  Note over API: Roles guard 403 on mismatch; 401 if no/invalid token
+```text
+Frontend           identity :3003          write-api / read-api
+    |                    |                         |
+ 1. |--POST /auth/login (email, password)--------->|
+    |                    |                         |
+ 2. |                    |--argon2id verify;       |
+    |                    |  look up tenantId+role  |
+    |                    |                         |
+ 3. |<--RS256 JWT (sub, tenantId, role, iss, aud, exp)
+    |                    |                         |
+ 4. |--request + Authorization: Bearer jwt-------->|
+    |                    |                         |
+ 5. |                    |<--GET /.well-known/jwks.json (cached, by kid)
+    |                    |                         |
+ 6. |                    |         verify sig + iss/aud/exp,
+    |                    |         scope tenantId+role+sub
+    |                    |                         |
+    |                    |  [ Roles guard: 403 on mismatch; 401 if no/invalid token ]
 ```
 
 - **Tenant + role resolution:** `tenant-context`'s `AuthMiddleware` extracts the Bearer token,
@@ -300,16 +296,11 @@ sequenceDiagram
   `tenant:{id}:drivers:geo`, `tenant:{id}:order:<id>:view`. The brace wraps only the id so the key
   tree nests cleanly.
 
-```mermaid
-flowchart TB
-  subgraph berlin["tenant: berlin"]
-    b1["tenant:{berlin}:order:...:view"]
-    b2["tenant:{berlin}:drivers:geo"]
-  end
-  subgraph tokyo["tenant: tokyo"]
-    t1["tenant:{tokyo}:order:...:view"]
-    t2["tenant:{tokyo}:drivers:geo"]
-  end
+```text
++-- tenant: berlin -------------------+    +-- tenant: tokyo --------------------+
+|  tenant:{berlin}:order:<id>:view    |    |  tenant:{tokyo}:order:<id>:view     |
+|  tenant:{berlin}:drivers:geo        |    |  tenant:{tokyo}:drivers:geo         |
++-------------------------------------+    +-------------------------------------+
 ```
 
 ---

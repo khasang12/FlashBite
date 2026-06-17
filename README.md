@@ -14,50 +14,66 @@ backend pattern, with a second tenant present purely to prove isolation.
 A single order flows through **every box** in the architecture (CQRS: an event-sourced write
 plane and a projected read plane, joined by Kafka):
 
-```mermaid
-flowchart LR
-  FE["Frontends :3100-3103<br/>customer / merchant / driver / admin"]
-  ID["identity :3003<br/>RS256 JWT + JWKS"]
-  W["write-api :3001"]
-  R["read-api :3002"]
-  PG[("Postgres<br/>event store + outbox<br/>+ RLS")]
-  OB["outbox-poller"]
-  KF["Redpanda - Kafka"]
-  PJ["projection-worker"]
-  SG["saga-worker - Temporal"]
-  MG[("MongoDB read model")]
-  RS[("Redis Cluster<br/>cache + geo")]
-
-  FE -->|"login"| ID
-  FE -->|"Bearer: place / accept"| W
-  FE -->|"Bearer: query + SSE"| R
-  W -.->|"verify via JWKS"| ID
-  R -.->|"verify via JWKS"| ID
-  W --> PG --> OB --> KF
-  KF --> PJ --> MG
-  KF --> SG
-  SG -->|"append accept / cancel"| PG
-  W -->|"merchant signal"| SG
-  R --> MG
-  R --> RS
+```text
+Frontends :3100-3103
+(customer / merchant / driver / admin)
+  |                   |                    |
+  | login             | Bearer:             | Bearer:
+  v                   | place / accept      | query + SSE
+identity :3003        v                    v
+(RS256 JWT + JWKS) <-...- write-api :3001  read-api :3002
+        ^                 (verify JWKS)..->^  (verify JWKS)..->^
+        |                      |                 |        |
+        +-- verify via JWKS ---+                 v        v
+                               |            MongoDB   Redis Cluster
+                               v            (read      (cache + geo)
+                          Postgres           model)
+                       (event store +
+                        outbox + RLS)
+                               |
+                          outbox-poller
+                               |
+                               v
+                       Redpanda / Kafka
+                        /            \
+                       v              v
+              projection-worker    saga-worker
+                (order-events)      (Temporal)
+                       |              |
+                       v              | append accept / cancel
+                  MongoDB         Postgres
+                (read model)   (event store)
+                               ^
+                               |
+                  write-api --merchant signal-->saga-worker
 ```
 
 Plus a real-time **telemetry plane** (ephemeral — Redis geo only, never persisted):
 
-```mermaid
-flowchart LR
-  GPS["driver GPS pings<br/>scripts/stream-gps.sh"]
-  R["read-api :3002"]
-  KF["Kafka telemetry-streams"]
-  TM["telemetry-worker"]
-  RS[("Redis Cluster geo")]
-  Q["web-driver / web-admin"]
-
-  GPS -->|"POST /drivers/:id/location"| R
-  R --> KF --> TM
-  TM -->|"GEOADD tenant:{id}:drivers:geo"| RS
-  Q -->|"GET /drivers/nearby"| R
-  R -->|"GEOSEARCH per-tenant"| RS
+```text
+driver GPS pings (scripts/stream-gps.sh)
+  |
+  | POST /drivers/:id/location (Bearer)
+  v
+read-api :3002
+  |
+  v
+Kafka telemetry-streams
+  |
+  v
+telemetry-worker
+  |
+  | GEOADD tenant:{id}:drivers:geo
+  v
+Redis Cluster geo
+  ^
+  | GEOSEARCH per-tenant
+  |
+read-api :3002
+  ^
+  | GET /drivers/nearby
+  |
+web-driver / web-admin
 ```
 
 > **Full architecture (components, sequence diagrams, data model):**
