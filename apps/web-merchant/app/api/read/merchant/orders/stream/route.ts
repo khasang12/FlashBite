@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<Response> {
-  const tenant = request.headers.get("x-tenant-id") ?? "berlin";
+  const auth = request.headers.get("authorization");
   const upstream = await fetch(`${READ_API}/merchant/orders/stream`, {
-    headers: { "X-Tenant-ID": tenant, Accept: "text/event-stream" },
+    headers: { ...(auth ? { Authorization: auth } : {}), Accept: "text/event-stream" },
     signal: request.signal,
   });
   return new Response(upstream.body, {
