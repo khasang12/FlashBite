@@ -1,12 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService, Prisma, buildEnvelope, withTenantTransaction } from "@flashbite/shared";
-import { getTenantId } from "@flashbite/tenant-context";
 import {
-  AGGREGATE_TYPES,
-  EVENT_TYPES,
-  TOPICS,
-  type OrderPlacedPayload,
-} from "@flashbite/contracts";
+  PrismaService, loadAggregate, appendWithExpectedVersion, ConcurrencyError,
+  foldOrder, place, INITIAL_ORDER_STATE,
+} from "@flashbite/shared";
+import { getTenantId } from "@flashbite/tenant-context";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 import { CreateOrderDto } from "./create-order.dto";
 
 @Injectable()
@@ -15,53 +13,33 @@ export class OrdersService {
 
   async placeOrder(dto: CreateOrderDto): Promise<{ orderId: string }> {
     const tenantId = getTenantId();
-    const payload: OrderPlacedPayload = {
+    const { state, version } = await loadAggregate(
+      this.prisma,
+      { tenantId, aggregateId: dto.orderId },
+      foldOrder,
+      INITIAL_ORDER_STATE,
+    );
+    const payload = place(state, {
       orderId: dto.orderId,
       customerId: dto.customerId,
       items: dto.items,
       totalAmount: dto.totalAmount,
-    };
-    const envelope = buildEnvelope({
-      tenantId,
-      eventType: EVENT_TYPES.ORDER_PLACED,
-      version: 1,
-      payload,
     });
+    if (payload === null) return { orderId: dto.orderId }; // already exists — idempotent
 
     try {
-      await withTenantTransaction(this.prisma, tenantId, async (tx) => {
-        await tx.eventStore.create({
-          data: {
-            id: envelope.eventId,
-            tenantId,
-            aggregateType: AGGREGATE_TYPES.ORDER,
-            aggregateId: dto.orderId,
-            version: 1,
-            eventType: EVENT_TYPES.ORDER_PLACED,
-            payload: payload as unknown as Prisma.InputJsonValue,
-          },
-        });
-        await tx.outbox.create({
-          data: {
-            id: envelope.eventId,
-            tenantId,
-            topic: TOPICS.ORDER_EVENTS,
-            partitionKey: `${tenantId}:${dto.orderId}`,
-            eventType: EVENT_TYPES.ORDER_PLACED,
-            payload: envelope as unknown as Prisma.InputJsonValue,
-          },
-        });
+      await appendWithExpectedVersion(this.prisma, {
+        tenantId,
+        aggregateType: AGGREGATE_TYPES.ORDER,
+        aggregateId: dto.orderId,
+        expectedVersion: version,
+        eventType: EVENT_TYPES.ORDER_PLACED,
+        payload,
       });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        return { orderId: dto.orderId };
-      }
+      if (err instanceof ConcurrencyError) return { orderId: dto.orderId }; // concurrent first-write, same order
       throw err;
     }
-
     return { orderId: dto.orderId };
   }
 }

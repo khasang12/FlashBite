@@ -110,6 +110,15 @@ describe("write-api orders (e2e)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("re-placing the same order is idempotent via the aggregate (one event_store row)", async () => {
+    const orderId = randomUUID();
+    await request(app.getHttpServer()).post("/orders").set(bearer(customer)).send(body(orderId));
+    const res = await request(app.getHttpServer()).post("/orders").set(bearer(customer)).send(body(orderId));
+    expect(res.status).toBe(201);
+    const events = await prisma.eventStore.findMany({ where: { tenantId: "berlin", aggregateId: orderId } });
+    expect(events).toHaveLength(1);
+  });
+
   it("derives the tenant from the token, not a header", async () => {
     const tokyo = await auth.mint({ tenantId: "tokyo", role: "customer", sub: "c-9" });
     const orderId = randomUUID();
