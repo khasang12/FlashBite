@@ -2,6 +2,33 @@
 
 Ideas captured for later phases. Not scheduled; no implementation yet.
 
+## Aggregate snapshots (event sourcing scalability)
+
+**Goal:** Cache a materialized aggregate state at a checkpoint version so rehydration skips
+replaying the full event stream from the beginning.
+
+**Why deferred:** order streams are tiny today (≤ 3 events per order: `OrderPlaced` →
+`OrderAccepted`/`OrderCancelled` → done). Snapshot logic adds complexity with zero measurable
+benefit at this scale.
+
+**Revisit when:** a single aggregate routinely accumulates dozens of events (e.g. a long-lived
+order with retries, rescheduling, or multi-step driver dispatch), or rehydration latency becomes
+observable. Store snapshots in the same Postgres `event_store` table (a `type: SNAPSHOT` row)
+or a separate `aggregate_snapshots` table.
+
+## Generic command bus / aggregate base class (second aggregate)
+
+**Goal:** Extract a reusable `AggregateRoot<TState, TEvent>` base class and a `CommandBus`
+abstraction so new aggregates don't repeat the rehydrate → apply → persist loop by hand.
+
+**Why deferred:** there is currently only one aggregate (`Order`). The right abstraction
+emerges after a second or third aggregate forces the pattern — abstracting prematurely from a
+single instance would be speculative.
+
+**Revisit when:** a second aggregate lands (e.g. a `DriverDispatch` aggregate for the driver
+dispatch phase, or a `Payment` aggregate if a real payment provider is integrated). At that
+point the shared boilerplate justifies a shared base class in `packages/shared`.
+
 ## Driver safety score (telemetry analytics)
 
 **Goal:** Derive a per-driver **safety score** from streamed GPS telemetry — e.g. harsh

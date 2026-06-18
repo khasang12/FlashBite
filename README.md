@@ -63,10 +63,14 @@ flowchart LR
 > **Full architecture (components, sequence diagrams, data model):**
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**Built (Phase 0 + 1 + 2):**
+**Built (Phase 0 + 1 + 2 + 3a):**
 
 - **CQRS + Event Sourcing + Transactional Outbox** — order events + outbox row committed in one
   Postgres transaction (Prisma); forward-only, rebuildable Mongo projections.
+- **Order aggregate + ES hard mode (Phase 3a)** — `POST /orders` rehydrates the `Order` aggregate
+  from its event stream, enforces transition invariants, and writes with optimistic concurrency
+  (version check), replacing the prior blind-append approach. `pnpm rebuild:projection` replays
+  the full event store into the Mongo read model (ES rebuildability demonstrated end-to-end).
 - **Kafka (via Redpanda)** — JSON envelopes, per-order partition keys (`tenantId:orderId`) for
   ordering. *(Avro + Schema Registry: planned, Phase 3.)*
 - **Temporal sagas** — one workflow per order: charge → per-tenant SLA timer raced against the
