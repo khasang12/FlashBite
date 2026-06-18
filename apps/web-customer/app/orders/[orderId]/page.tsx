@@ -7,10 +7,16 @@ import {
   CardContent,
   Skeleton,
   Button,
+  AuthGate,
   ORDER_STATUS,
   type OrderView,
 } from "@flashbite/web-shared";
 import { Header } from "@/components/header";
+
+const CUSTOMER_DEMOS = [
+  { label: "Berlin customer", email: "customer@berlin.test" },
+  { label: "Tokyo customer", email: "customer@tokyo.test" },
+];
 
 const TERMINAL = [ORDER_STATUS.ACCEPTED, ORDER_STATUS.CANCELLED] as string[];
 const POLL_MS = 2000;
@@ -19,7 +25,17 @@ const POLL_MS = 2000;
 // timer (default SAGA_SLA_SECONDS=300) so the FE catches the auto-cancel.
 const MAX_ATTEMPTS = 170;
 
-export default function OrderTracking({
+export default function OrderTracking(props: {
+  params: Promise<{ orderId: string }>;
+}) {
+  return (
+    <AuthGate demoUsers={CUSTOMER_DEMOS} requiredRole="customer" title="FlashBite — Customer">
+      <OrderTrackingContent {...props} />
+    </AuthGate>
+  );
+}
+
+function OrderTrackingContent({
   params,
 }: {
   params: Promise<{ orderId: string }>;
