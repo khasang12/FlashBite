@@ -9,3 +9,5 @@ export * from "./envelope";
 export * from "./event-store";
 export * from "./temporal";
 export * from "./tenant-transaction";
+export * from "./aggregate-store";
+export * from "./order-aggregate";
