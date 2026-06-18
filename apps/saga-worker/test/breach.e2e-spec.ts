@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, appendEvent, TemporalHandle } from "@flashbite/shared";
-import { EVENT_TYPES } from "@flashbite/contracts";
+import { connectTemporal, appendWithExpectedVersion, TemporalHandle } from "@flashbite/shared";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 import { startSagaWorker, SagaWorkerHandle } from "../src/main";
 
 describe("saga-worker SLA breach (e2e)", () => {
@@ -21,7 +21,7 @@ describe("saga-worker SLA breach (e2e)", () => {
 
   it("no approval before the SLA -> refund + OrderCancelled(reason=SLA_BREACH)", async () => {
     const orderId = randomUUID();
-    await appendEvent(prisma, { tenantId: "berlin", aggregateType: "ORDER", aggregateId: orderId, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId } });
+    await appendWithExpectedVersion(prisma, { tenantId: "berlin", aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId, expectedVersion: 0, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId, customerId: "c-1", items: [], totalAmount: 1200 } });
 
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",

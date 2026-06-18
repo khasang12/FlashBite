@@ -4,7 +4,8 @@ import { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, appendEvent, TemporalHandle } from "@flashbite/shared";
+import { connectTemporal, appendWithExpectedVersion, TemporalHandle } from "@flashbite/shared";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 import { startSagaWorker, SagaWorkerHandle } from "../../saga-worker/src/main";
 import { AppModule } from "../src/app.module";
 import { TokenVerifier } from "@flashbite/tenant-context";
@@ -41,7 +42,7 @@ describe("write-api merchant accept (e2e)", () => {
 
   it("POST /orders/:id/accept signals the workflow -> ACCEPTED + OrderAccepted event", async () => {
     const orderId = randomUUID();
-    await appendEvent(prisma, { tenantId: "berlin", aggregateType: "ORDER", aggregateId: orderId, eventType: "OrderPlaced", payload: { orderId } });
+    await appendWithExpectedVersion(prisma, { tenantId: "berlin", aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId, expectedVersion: 0, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId, customerId: "c-1", items: [], totalAmount: 1200 } });
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,

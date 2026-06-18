@@ -6,7 +6,6 @@ export * from "./mongo.service";
 export * from "./redis";
 export * from "./redis.service";
 export * from "./envelope";
-export * from "./event-store";
 export * from "./temporal";
 export * from "./tenant-transaction";
 export * from "./aggregate-store";
