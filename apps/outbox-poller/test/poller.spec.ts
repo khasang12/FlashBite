@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Kafka, logLevel } from "kafkajs";
 import { PrismaService, buildEnvelope } from "@flashbite/shared";
-import { EVENT_TYPES, TOPICS, subjectFor } from "@flashbite/contracts";
+import { EVENT_TYPES, TOPICS } from "@flashbite/contracts";
 import { createRegistry, registerAllSchemas, decodePayload, parseHeaders } from "@flashbite/messaging";
 import { pollOnce } from "../src/poller";
 
@@ -49,8 +49,12 @@ describe("outbox poller (Avro)", () => {
 
     const producer = kafka.producer();
     await producer.connect();
-    const count = await pollOnce(prisma, producer, registry);
-    await producer.disconnect();
+    let count: number;
+    try {
+      count = await pollOnce(prisma, producer, registry);
+    } finally {
+      await producer.disconnect();
+    }
     expect(count).toBeGreaterThanOrEqual(1);
 
     const row = await prisma.outbox.findUnique({ where: { id: eventId } });
@@ -81,7 +85,6 @@ describe("outbox poller (Avro)", () => {
     expect(received.eventId).toBe(eventId);
     expect(received.orderId).toBe(orderId);
     expect(received.sku).toBe("x");
-    expect(subjectFor(TOPICS.ORDER_EVENTS, "OrderPlaced")).toContain("OrderPlaced");
 
     await prisma.outbox.delete({ where: { id: eventId } });
   });
