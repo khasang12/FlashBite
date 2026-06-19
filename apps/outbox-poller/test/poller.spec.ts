@@ -1,21 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { Kafka, logLevel } from "kafkajs";
 import { PrismaService, buildEnvelope } from "@flashbite/shared";
-import { EVENT_TYPES, TOPICS } from "@flashbite/contracts";
+import { EVENT_TYPES, TOPICS, subjectFor } from "@flashbite/contracts";
+import { createRegistry, registerAllSchemas, decodePayload, parseHeaders } from "@flashbite/messaging";
 import { pollOnce } from "../src/poller";
 
-describe("outbox poller", () => {
+const HOST = process.env.SCHEMA_REGISTRY_URL ?? "http://localhost:18081";
+
+describe("outbox poller (Avro)", () => {
   const prisma = new PrismaService();
   const kafka = new Kafka({ clientId: "poller-test", brokers: ["localhost:9092"], logLevel: logLevel.NOTHING });
+  const registry = createRegistry(HOST);
 
   beforeAll(async () => {
     await prisma.$connect();
+    await registerAllSchemas(registry, HOST);
   });
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  it("publishes PENDING rows and marks them SENT", async () => {
+  it("publishes PENDING rows as Avro (payload value + headers) and marks them SENT", async () => {
     const orderId = randomUUID();
     const eventId = randomUUID();
     const envelope = buildEnvelope({
@@ -23,7 +28,7 @@ describe("outbox poller", () => {
       eventType: EVENT_TYPES.ORDER_PLACED,
       version: 1,
       eventId,
-      payload: { orderId, customerId: "c-1", items: [], totalAmount: 0 },
+      payload: { orderId, customerId: "c-1", items: [{ sku: "x", qty: 1, price: 2.5 }], totalAmount: 2.5 },
     });
     await prisma.outbox.create({
       data: {
@@ -44,7 +49,7 @@ describe("outbox poller", () => {
 
     const producer = kafka.producer();
     await producer.connect();
-    const count = await pollOnce(prisma, producer);
+    const count = await pollOnce(prisma, producer, registry);
     await producer.disconnect();
     expect(count).toBeGreaterThanOrEqual(1);
 
@@ -54,7 +59,7 @@ describe("outbox poller", () => {
     const consumer = kafka.consumer({ groupId: `poller-test-${Date.now()}` });
     await consumer.connect();
     await consumer.subscribe({ topic: TOPICS.ORDER_EVENTS, fromBeginning: true });
-    const received: string = await new Promise((resolve, reject) => {
+    const received: { eventId: string; orderId: string; sku: string } = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("event not received")), 10000);
       consumer.on(consumer.events.GROUP_JOIN, () => {
         for (const [p, o] of startOffsets) consumer.seek({ topic: TOPICS.ORDER_EVENTS, partition: p, offset: o.toString() });
@@ -63,17 +68,20 @@ describe("outbox poller", () => {
         .run({
           eachMessage: async ({ partition, message }) => {
             if (BigInt(message.offset) < (startOffsets.get(partition) ?? 0n)) return;
-            const value = JSON.parse(message.value!.toString());
-            if (value.eventId === eventId) {
-              clearTimeout(timer);
-              resolve(value.eventId);
-            }
+            const meta = parseHeaders(message.headers);
+            if (meta.eventId !== eventId) return;
+            const payload = await decodePayload<{ orderId: string; items: { sku: string }[] }>(registry, message.value!);
+            clearTimeout(timer);
+            resolve({ eventId: meta.eventId, orderId: payload.orderId, sku: payload.items[0].sku });
           },
         })
         .catch(reject);
     });
     await consumer.disconnect();
-    expect(received).toBe(eventId);
+    expect(received.eventId).toBe(eventId);
+    expect(received.orderId).toBe(orderId);
+    expect(received.sku).toBe("x");
+    expect(subjectFor(TOPICS.ORDER_EVENTS, "OrderPlaced")).toContain("OrderPlaced");
 
     await prisma.outbox.delete({ where: { id: eventId } });
   });

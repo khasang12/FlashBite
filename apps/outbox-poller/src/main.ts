@@ -1,5 +1,6 @@
 import { Kafka, logLevel } from "kafkajs";
 import { PrismaService, loadConfig } from "@flashbite/shared";
+import { createRegistry } from "@flashbite/messaging";
 import { pollOnce } from "./poller";
 
 const POLL_INTERVAL_MS = Number(process.env.OUTBOX_POLL_INTERVAL_MS ?? 1000);
@@ -16,6 +17,7 @@ async function main(): Promise<void> {
   });
   const producer = kafka.producer();
   await producer.connect();
+  const registry = createRegistry(config.schemaRegistryUrl);
 
   // eslint-disable-next-line no-console
   console.log("outbox-poller running");
@@ -30,7 +32,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   while (running) {
-    const sent = await pollOnce(prisma, producer);
+    const sent = await pollOnce(prisma, producer, registry);
     if (sent === 0) await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
 }
