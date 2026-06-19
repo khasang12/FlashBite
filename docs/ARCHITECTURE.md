@@ -1,10 +1,11 @@
 # FlashBite — Architecture (what's built so far)
 
 This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2 +
-Phase 3a: the walking-skeleton order plane, the telemetry plane, all four frontends, the verified-JWT
-identity + Postgres-RLS isolation layer, and the event-sourced Order aggregate with optimistic
-concurrency). It is deliberately scoped to working code — a "Not yet built" section at the end lists
-what the master spec still defers to later phases.
+Phase 3a + Phase 3b: the walking-skeleton order plane, the telemetry plane, all four frontends, the
+verified-JWT identity + Postgres-RLS isolation layer, the event-sourced Order aggregate with
+optimistic concurrency, and Confluent-Avro on the Kafka event bus with an enforced Schema Registry).
+It is deliberately scoped to working code — a "Not yet built" section at the end lists what the
+master spec still defers to later phases.
 
 > Companion to the vision spec in
 > [`docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md`](superpowers/specs/2026-06-13-flashbite-showcase-design.md).
@@ -19,6 +20,12 @@ Postgres / MongoDB / Redis Cluster / Redpanda (Kafka) / Temporal. It is **CQRS**
 (event-sourced) and a read plane (projected), joined by Kafka. Every API request carries a
 **verified RS256 JWT** (from the `identity` service); tenant + role come from the token, not a
 trusted header.
+
+Kafka messages carry **Avro-encoded payloads** (value) with envelope metadata (eventId, tenantId,
+eventType, …) in **Kafka headers**. Schemas are owned by `@flashbite/contracts` (`.avsc` files +
+subject map) and managed by a **Confluent-compatible Schema Registry** (`localhost:18081`).
+`pnpm register:schemas` explicitly registers them at **BACKWARD** compatibility; producers are
+lookup-only (no auto-registration). Serialization lives in `@flashbite/messaging`.
 
 ```mermaid
 flowchart LR
@@ -101,10 +108,11 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | `web-admin` | Next.js | 3103 | Operator console (logs in as `operator@flashbite.test`): cross-tenant GMV/analytics charts, per-tenant driver maps, combined orders — served by the `/admin/*` endpoints. |
 
 **Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
-topic + key helpers, `OrderView`), `shared` (Prisma client + optional restricted-role URL,
-`withTenantTransaction` for the RLS GUC, the pure `Order` aggregate + `aggregate-store`
-load/append-with-expected-version, Mongo + Redis clients, JSON envelope builder), `tenant-context`
-(verify-JWT `TokenVerifier` + `AuthMiddleware` →
+topic + key helpers, `OrderView`, `.avsc` Avro schemas + subject map), `messaging` (Avro serde +
+Schema Registry client + header encode/decode + publish/consume helpers + `register:schemas`
+script), `shared` (Prisma client + optional restricted-role URL, `withTenantTransaction` for the
+RLS GUC, the pure `Order` aggregate + `aggregate-store` load/append-with-expected-version, Mongo +
+Redis clients), `tenant-context` (verify-JWT `TokenVerifier` + `AuthMiddleware` →
 AsyncLocalStorage `{tenantId, role, sub}`, `@Roles`/`RolesGuard`), `web-shared` (design system, API
 client, auth store + `AuthGate`/`LoginForm`, stores, SSE hook, geo + analytics helpers).
 
@@ -235,6 +243,10 @@ flowchart LR
 - **Version-guarded projection:** the read model only moves forward (`existing.version < event.version`).
 - **Saga compensation:** a decline or SLA breach triggers a refund activity before recording the
   cancellation — the textbook saga compensation shape (payment is a fake activity today).
+- **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
+  travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
+  compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
+  serde lives in `@flashbite/messaging`; schema definitions live in `@flashbite/contracts`.
 
 ---
 
@@ -406,7 +418,6 @@ switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/ex
 
 These appear in the vision spec or `docs/superpowers/backlog.md` but are **not implemented**:
 
-- **Avro + Schema Registry** — envelopes are currently JSON (Phase 3b hardening).
 - **Aggregate snapshots + generic command bus** — the aggregate replays full event history on every
   load; snapshotting and a reusable command-dispatch abstraction are backlogged (see
   `docs/superpowers/backlog.md`).
@@ -428,3 +439,10 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 > `cancel` with `InvalidTransitionError`), rehydrate-decide-append with optimistic concurrency
 > (`appendWithExpectedVersion` → `ConcurrencyError`) across write-api and the saga, and deterministic
 > projection rebuild from the event store.
+>
+> **Completed in Phase 3b:** Confluent-Avro on the Kafka event bus — Avro-encoded payloads with
+> envelope metadata in headers, schemas in `@flashbite/contracts` (`.avsc` + subject map), serde in
+> `@flashbite/messaging`, BACKWARD compatibility enforced by the Schema Registry, explicit
+> registration via `pnpm register:schemas`, producers lookup-only. All 2 produce and 4 consume sites
+> migrated (outbox-poller, projection-worker, saga-worker, read-api SSE feeder, telemetry producer,
+> telemetry-worker).
