@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "OrderCancelled",
+  "namespace": "com.flashbite.events",
+  "fields": [
+    { "name": "orderId", "type": "string" },
+    { "name": "reason", "type": "string" }
+  ]
+}

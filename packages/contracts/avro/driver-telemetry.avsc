@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "DriverTelemetry",
+  "namespace": "com.flashbite.events",
+  "fields": [
+    { "name": "driverId", "type": "string" },
+    { "name": "orderId", "type": ["null", "string"], "default": null },
+    { "name": "lng", "type": "double" },
+    { "name": "lat", "type": "double" }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "type": "record",
+  "name": "OrderAccepted",
+  "namespace": "com.flashbite.events",
+  "fields": [{ "name": "orderId", "type": "string" }]
+}
