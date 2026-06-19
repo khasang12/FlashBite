@@ -130,16 +130,16 @@ sequenceDiagram
   participant TP as Temporal
 
   Cust->>W: POST /orders
-  W->>PG: append OrderPlaced + outbox row (one tx)
+  W->>PG: append OrderPlaced and outbox row (one tx)
   W-->>Cust: 201 orderId
   OB->>PG: poll unpublished
-  OB->>KF: publish OrderPlaced (key tenantId:orderId)
+  OB->>KF: publish OrderPlaced (key tenantId-orderId)
   par read model
     KF->>PJ: OrderPlaced
     PJ->>MG: upsert order (status PLACED)
   and saga
     KF->>SG: OrderPlaced
-    SG->>TP: start workflow id tenantId:orderId
+    SG->>TP: start workflow id tenantId-orderId
     TP->>SG: chargePayment (fake)
   end
 ```
@@ -161,22 +161,22 @@ sequenceDiagram
 
   Note over TP: workflow racing SLA timer vs merchant signal
   alt accepted in time
-    Merch->>W: POST /orders/:id/accept
+    Merch->>W: POST /orders/ID/accept
     W->>TP: signal merchantApproval(true)
     TP->>SG: recordOrderAccepted
     SG->>PG: append OrderAccepted
   else declined
-    Merch->>W: POST /orders/:id/decline
+    Merch->>W: POST /orders/ID/decline
     W->>TP: signal merchantApproval(false)
-    TP->>SG: refund + recordOrderCancelled(DECLINED)
+    TP->>SG: refund then recordOrderCancelled(DECLINED)
     SG->>PG: append OrderCancelled(reason)
   else SLA breach (no signal)
-    TP->>SG: refund + recordOrderCancelled(SLA_BREACH)
+    TP->>SG: refund then recordOrderCancelled(SLA_BREACH)
     SG->>PG: append OrderCancelled(reason)
   end
   PG->>KF: (via outbox) OrderAccepted / OrderCancelled
   KF->>PJ: event
-  PJ->>MG: update status (+ cancelReason)
+  PJ->>MG: update status and cancelReason
   R-->>Merch: live update via SSE
 ```
 
@@ -198,7 +198,7 @@ flowchart LR
   DE["aggregate decides next event"]
   AP["appendWithExpectedVersion at version plus one"]
   PG[("event_store + outbox - one tx")]
-  CE["P2002 -> ConcurrencyError"]
+  CE["P2002 maps to ConcurrencyError"]
   CMD --> LD --> ST --> DE --> AP --> PG
   AP -.->|"unique tenantId, aggregateId, version"| CE
 ```
