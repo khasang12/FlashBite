@@ -49,6 +49,7 @@ export {
   placeOrder, getOrder, listOrders, acceptOrder, declineOrder,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
+  UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
 export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";

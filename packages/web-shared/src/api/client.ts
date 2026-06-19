@@ -25,17 +25,34 @@ export interface ReportLocationBody {
   orderId?: string;
 }
 
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "UnauthorizedError";
+  }
+}
+
 /** Authorization header from the current token (verified-JWT identity). */
 function authHeader(): Record<string, string> {
   const token = useAuthStore.getState().token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** fetch + Bearer header; on 401 clears the session (AuthGate bounces to login) and throws. */
+async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
+  if (res.status === 401) {
+    useAuthStore.getState().logout();
+    throw new UnauthorizedError();
+  }
+  return res;
+}
+
 /** POST /orders via the same-origin write proxy. */
 export async function placeOrder(req: PlaceOrderRequest): Promise<{ orderId: string }> {
-  const res = await fetch("/api/write/orders", {
+  const res = await authedFetch("/api/write/orders", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeader() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`placeOrder failed: ${res.status}`);
@@ -44,7 +61,7 @@ export async function placeOrder(req: PlaceOrderRequest): Promise<{ orderId: str
 
 /** GET /orders/:id via the same-origin read proxy. Returns null on 404 (read model not caught up). */
 export async function getOrder(orderId: string): Promise<OrderView | null> {
-  const res = await fetch(`/api/read/orders/${encodeURIComponent(orderId)}`, { headers: authHeader() });
+  const res = await authedFetch(`/api/read/orders/${encodeURIComponent(orderId)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`getOrder failed: ${res.status}`);
   return (await res.json()) as OrderView;
@@ -52,15 +69,14 @@ export async function getOrder(orderId: string): Promise<OrderView | null> {
 
 /** GET /merchant/orders via the same-origin read proxy. Returns all orders for the tenant. */
 export async function listOrders(): Promise<OrderView[]> {
-  const res = await fetch("/api/read/merchant/orders", { headers: authHeader() });
+  const res = await authedFetch("/api/read/merchant/orders");
   if (!res.ok) throw new Error(`listOrders failed: ${res.status}`);
   return (await res.json()) as OrderView[];
 }
 
 async function signalOrder(orderId: string, action: "accept" | "decline"): Promise<void> {
-  const res = await fetch(`/api/write/orders/${encodeURIComponent(orderId)}/${action}`, {
+  const res = await authedFetch(`/api/write/orders/${encodeURIComponent(orderId)}/${action}`, {
     method: "POST",
-    headers: authHeader(),
   });
   if (!res.ok) throw new Error(`${action}Order failed: ${res.status}`);
 }
@@ -77,9 +93,9 @@ export function declineOrder(orderId: string): Promise<void> {
  * the ingest endpoint is served by read-api (:3002), not write-api.
  */
 export async function reportLocation(driverId: string, body: ReportLocationBody): Promise<{ driverId: string }> {
-  const res = await fetch(`/api/read/drivers/${encodeURIComponent(driverId)}/location`, {
+  const res = await authedFetch(`/api/read/drivers/${encodeURIComponent(driverId)}/location`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeader() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`reportLocation failed: ${res.status}`);
@@ -89,7 +105,7 @@ export async function reportLocation(driverId: string, body: ReportLocationBody)
 /** GET /drivers/nearby via the same-origin read proxy. Distance-sorted ascending. */
 export async function getNearbyDrivers(lng: number, lat: number, radiusKm = 5): Promise<NearbyDriver[]> {
   const qs = new URLSearchParams({ lng: String(lng), lat: String(lat), radiusKm: String(radiusKm) });
-  const res = await fetch(`/api/read/drivers/nearby?${qs.toString()}`, { headers: authHeader() });
+  const res = await authedFetch(`/api/read/drivers/nearby?${qs.toString()}`);
   if (!res.ok) throw new Error(`getNearbyDrivers failed: ${res.status}`);
   return (await res.json()) as NearbyDriver[];
 }
@@ -97,13 +113,13 @@ export async function getNearbyDrivers(lng: number, lat: number, radiusKm = 5): 
 // --- Operator console (cross-tenant; requires an operator token) ---
 
 export async function getAdminOrders(): Promise<OrderView[]> {
-  const res = await fetch("/api/read/admin/orders", { headers: authHeader() });
+  const res = await authedFetch("/api/read/admin/orders");
   if (!res.ok) throw new Error(`getAdminOrders failed: ${res.status}`);
   return (await res.json()) as OrderView[];
 }
 
 export async function getAdminDrivers(): Promise<TenantNearbyDriver[]> {
-  const res = await fetch("/api/read/admin/drivers", { headers: authHeader() });
+  const res = await authedFetch("/api/read/admin/drivers");
   if (!res.ok) throw new Error(`getAdminDrivers failed: ${res.status}`);
   return (await res.json()) as TenantNearbyDriver[];
 }
