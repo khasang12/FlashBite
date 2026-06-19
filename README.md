@@ -279,3 +279,60 @@ Telemetry is **ephemeral** — Redis geospatial only, never Postgres / the event
 Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`), scoped by the
 token's tenant. Manual requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
 [`docs/superpowers/plans/phase-1c-ii-verification.md`](docs/superpowers/plans/phase-1c-ii-verification.md).
+
+---
+
+## Schema evolution & deployment (Phase 3b)
+
+Kafka messages are **Confluent-Avro**: the value is the event payload, envelope metadata
+(`eventType`/`tenantId`/`eventId`/`version`/`occurredAt`) rides in **Kafka headers**, and each message
+carries its **writer schema id** so consumers always decode with the schema the message was written
+with. Schemas are governed in the Schema Registry (`localhost:18081`), registered explicitly by
+`pnpm register:schemas` at **BACKWARD** compatibility; producers are **lookup-only** and never
+auto-register.
+
+To evolve a schema without breaking the live bus, follow these rules.
+
+**1. Only make compatible changes.** Under BACKWARD, you may **add an optional field with a default**
+or **remove a field** — nothing else. `pnpm register:schemas` runs the compatibility check and **fails
+if the change is breaking** (e.g. a new required field with no default), so CI catches it before it
+ships. Adding a required field without a default is not allowed.
+
+**2. Deploy order follows the compatibility mode.** BACKWARD means *a new schema can read old data*,
+so roll out **consumers before producers**:
+
+| Mode | Guarantee | Safe deploy order |
+|---|---|---|
+| **BACKWARD** (current) | new schema reads old data | **consumers first, then producers** |
+| FORWARD | old schema reads new data | producers first, then consumers |
+| FULL / FULL_TRANSITIVE | both directions | **any order** (most foolproof) |
+
+If you'd rather not reason about order, raise the subjects to `FULL_TRANSITIVE` in
+`packages/messaging/src/register.ts` — then any allowed change is safe in any direction and is
+checked against *every* prior version.
+
+**3. Restart producers to emit the new schema.** Producers cache the resolved schema id for the
+process lifetime (`resolveSchemaId`), so a running producer keeps emitting the old version until it
+**restarts**. This is safe under BACKWARD (consumers still read old data), but if you expect the new
+version on the wire, redeploy the producers.
+
+**4. Keep handlers tolerant of field drift.** The registry guarantees a message is *decodable*, not
+that your logic copes. A new field is ignored by old handlers; a removed field reads as `undefined`.
+Read optional fields defensively (`?.` / `??`) in `applyEvent` / `applyTelemetry` / `toStreamEvent`.
+
+> **Note:** Avro governs only the Kafka *transport*. The durable source of truth is the **JSON
+> `event_store` in Postgres**, and `pnpm rebuild:projection` replays it straight through `applyEvent`
+> (bypassing Kafka/Avro). So historical events with older payload shapes hit your newest handler code
+> on every rebuild — handler tolerance of old shapes matters there regardless of the Avro schema.
+
+**Change workflow:**
+
+```bash
+# 1. edit the schema (additive: new field with a `default`)
+#    packages/contracts/avro/<event>.avsc   + the matching TS payload type in contracts
+# 2. register — the BACKWARD check rejects a breaking change locally / in CI
+pnpm register:schemas
+# 3. update producer/handler code
+# 4. deploy consumers first, then producers   (BACKWARD)
+# 5. restart producers so they pick up the new latest schema id
+```
