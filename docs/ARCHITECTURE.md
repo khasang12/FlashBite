@@ -1,9 +1,10 @@
 # FlashBite — Architecture (what's built so far)
 
-This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2: the
-walking-skeleton order plane, the telemetry plane, all four frontends, and the verified-JWT identity
-+ Postgres-RLS isolation layer). It is deliberately scoped to working code — a "Not yet built"
-section at the end lists what the master spec still defers to later phases.
+This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2 +
+Phase 3a: the walking-skeleton order plane, the telemetry plane, all four frontends, the verified-JWT
+identity + Postgres-RLS isolation layer, and the event-sourced Order aggregate with optimistic
+concurrency). It is deliberately scoped to working code — a "Not yet built" section at the end lists
+what the master spec still defers to later phases.
 
 > Companion to the vision spec in
 > [`docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md`](superpowers/specs/2026-06-13-flashbite-showcase-design.md).
@@ -88,11 +89,11 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | Component | Type | Port | Responsibility |
 |---|---|---|---|
 | `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
-| `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders (append `OrderPlaced` to the event store + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal. `@Roles` gates: `customer` places, `merchant` accepts/declines. |
+| `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal. `@Roles` gates: `customer` places, `merchant` accepts/declines. |
 | `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
-| `saga-worker` | TS worker + Temporal | — | One workflow per order: charge → race SLA timer vs merchant approval → accept, or refund + cancel. |
+| `saga-worker` | TS worker + Temporal | — | One workflow per order: charge → race SLA timer vs merchant approval → accept, or refund + cancel. Its accept/cancel activities drive the same Order aggregate (state-machine guarded, expected-version append). |
 | `telemetry-worker` | TS worker | — | Consumes `telemetry-streams`, `GEOADD`s drivers into the per-tenant Redis geo key. |
 | `web-customer` | Next.js | 3100 | Storefront: menu, cart, checkout, live order tracking. |
 | `web-merchant` | Next.js | 3101 | Order queue (live SSE), accept/decline. |
@@ -101,8 +102,9 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 
 **Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
 topic + key helpers, `OrderView`), `shared` (Prisma client + optional restricted-role URL,
-`withTenantTransaction` for the RLS GUC, event-store/outbox append, Mongo + Redis clients, JSON
-envelope builder), `tenant-context` (verify-JWT `TokenVerifier` + `AuthMiddleware` →
+`withTenantTransaction` for the RLS GUC, the pure `Order` aggregate + `aggregate-store`
+load/append-with-expected-version, Mongo + Redis clients, JSON envelope builder), `tenant-context`
+(verify-JWT `TokenVerifier` + `AuthMiddleware` →
 AsyncLocalStorage `{tenantId, role, sub}`, `@Roles`/`RolesGuard`), `web-shared` (design system, API
 client, auth store + `AuthGate`/`LoginForm`, stores, SSE hook, geo + analytics helpers).
 
@@ -182,6 +184,44 @@ sequenceDiagram
 `SLA_BREACH` | `DECLINED`). The `web-customer` tracking page polls `GET /orders/:id`; the
 `web-merchant` and `web-admin` views update live over SSE.
 
+### Event-sourced write model (Phase 3a)
+
+Both write paths — placing an order (write-api) and the saga's accept/cancel — go through a single
+event-sourced aggregate instead of appending events ad hoc. Every write is **rehydrate → decide →
+append-at-expected-version**:
+
+```mermaid
+flowchart LR
+  CMD["command: place / accept / cancel"]
+  LD["loadAggregate - replay event_store under RLS"]
+  ST["OrderState + current version"]
+  DE["aggregate decides next event"]
+  AP["appendWithExpectedVersion at version plus one"]
+  PG[("event_store + outbox - one tx")]
+  CE["P2002 -> ConcurrencyError"]
+  CMD --> LD --> ST --> DE --> AP --> PG
+  AP -.->|"unique tenantId, aggregateId, version"| CE
+```
+
+- **Pure aggregate** (`@flashbite/shared` `order-aggregate.ts`): `foldOrder` replays an event list
+  into the current `OrderState`; the commands `place` / `accept` / `cancel` decide the next event from
+  that state and reject illegal transitions with `InvalidTransitionError` (e.g. accepting an
+  already-terminal order). No I/O — a function of (state, command), trivially unit-tested.
+- **Rehydrate-decide-append** (`aggregate-store.ts`): `loadAggregate` replays a tenant's `event_store`
+  rows (under the `withTenantTransaction` RLS GUC) to rebuild state + current version;
+  `appendWithExpectedVersion` writes the new event at `expectedVersion + 1` together with its outbox
+  row in one transaction. A unique constraint on `(tenantId, aggregateId, version)` enforces
+  **optimistic concurrency** — a concurrent writer at the same version trips Prisma `P2002`, surfaced
+  as `ConcurrencyError`.
+- **Conflict handling:** write-api treats `ConcurrencyError` on place as idempotent (the order already
+  exists → return it). The saga lets it propagate so Temporal retries the activity; an
+  `InvalidTransitionError` there is a benign no-op (the order already reached a terminal state — e.g.
+  the SLA-timer-vs-accept race loser), so no second terminal event is ever appended.
+- **Projection rebuild:** because `event_store` is the source of truth, the read model is disposable.
+  `pnpm rebuild:projection` clears the Mongo `orders` collection + the inbox and replays every
+  `event_store` event through the same `applyEvent` projection logic — deterministic and idempotent
+  (re-running yields the same read model).
+
 ### Why it's "hard mode"
 
 - **Transactional outbox:** the event and its outbox row commit in one Postgres transaction, so a
@@ -189,6 +229,9 @@ sequenceDiagram
 - **Idempotency at every hop:** stable `eventId`; the projection's Mongo **inbox** skips
   re-delivered events; the saga starts workflows with `WorkflowId = tenantId:orderId` and a
   reject-duplicate reuse policy, so a re-delivered `OrderPlaced` can't double-charge.
+- **Optimistic concurrency on the write side:** every event is appended at an expected aggregate
+  version behind a `(tenantId, aggregateId, version)` unique constraint, so two concurrent writers
+  for the same order can't both win — the loser gets a `ConcurrencyError`.
 - **Version-guarded projection:** the read model only moves forward (`existing.version < event.version`).
 - **Saga compensation:** a decline or SLA breach triggers a refund activity before recording the
   cancellation — the textbook saga compensation shape (payment is a fake activity today).
@@ -363,7 +406,10 @@ switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/ex
 
 These appear in the vision spec or `docs/superpowers/backlog.md` but are **not implemented**:
 
-- **Avro + Schema Registry** — envelopes are currently JSON (Phase 3 hardening).
+- **Avro + Schema Registry** — envelopes are currently JSON (Phase 3b hardening).
+- **Aggregate snapshots + generic command bus** — the aggregate replays full event history on every
+  load; snapshotting and a reusable command-dispatch abstraction are backlogged (see
+  `docs/superpowers/backlog.md`).
 - **Real payment provider** — charge/refund are fake Temporal activities.
 - **Driver dispatch** — closing the order↔driver loop (saga assigns a nearby driver; driver
   accept/pickup/deliver).
@@ -377,3 +423,8 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 > **Completed in Phase 2:** identity service + verified-JWT tenancy (replacing the trusted
 > `X-Tenant-ID` header), Postgres Row-Level Security on the write plane, role-based access, and the
 > authenticated cross-tenant operator API + frontend login.
+>
+> **Completed in Phase 3a:** the event-sourced Order aggregate (pure `foldOrder` + `place`/`accept`/
+> `cancel` with `InvalidTransitionError`), rehydrate-decide-append with optimistic concurrency
+> (`appendWithExpectedVersion` → `ConcurrencyError`) across write-api and the saga, and deterministic
+> projection rebuild from the event store.
