@@ -83,8 +83,8 @@ Namespace `com.flashbite.events`. Hand-written `.avsc`, one record per event typ
 mirroring the existing payload TypeScript types exactly.
 
 - `packages/contracts/avro/order-placed.avsc` — record `OrderPlaced`
-  `{ orderId: string, customerId: string, items: array<record Item {
-  name: string, qty: int, price: double }>, totalAmount: double }`.
+  `{ orderId: string, customerId: string, items: array<record OrderItem {
+  sku: string, qty: int, price: double }>, totalAmount: double }`.
 - `packages/contracts/avro/order-accepted.avsc` — record `OrderAccepted`
   `{ orderId: string }`.
 - `packages/contracts/avro/order-cancelled.avsc` — record `OrderCancelled`
