@@ -9,6 +9,7 @@ import {
   type EventEnvelope,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
+import { createRegistry, readEnvelope } from "@flashbite/messaging";
 import { OrderStreamService } from "./order-stream.service";
 
 /** Maps an order-events envelope to the merchant SSE event shape. */
@@ -25,14 +26,15 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     const config = loadConfig();
+    const registry = createRegistry(config.schemaRegistryUrl);
     const kafka = new Kafka({ clientId: CONSUMER_GROUPS.READ_API_SSE, brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
     this.consumer = kafka.consumer({ groupId: `${CONSUMER_GROUPS.READ_API_SSE}-${process.pid}` });
     await this.consumer.connect();
     await this.consumer.subscribe({ topic: TOPICS.ORDER_EVENTS, fromBeginning: false });
     await this.consumer.run({
       eachMessage: async ({ message }) => {
-        if (!message.value) return;
-        const envelope = JSON.parse(message.value.toString()) as EventEnvelope;
+        const envelope = await readEnvelope(registry, message);
+        if (!envelope) return;
         this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
       },
     });
