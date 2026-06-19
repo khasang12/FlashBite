@@ -212,6 +212,9 @@ importers:
       '@flashbite/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@flashbite/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
       '@flashbite/shared':
         specifier: workspace:*
         version: link:../../packages/shared
