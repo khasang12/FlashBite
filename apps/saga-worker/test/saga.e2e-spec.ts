@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, appendEvent, TemporalHandle } from "@flashbite/shared";
-import { EVENT_TYPES } from "@flashbite/contracts";
+import { connectTemporal, appendWithExpectedVersion, TemporalHandle } from "@flashbite/shared";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 import { merchantApprovalSignal } from "../src/workflows";
 import { startSagaWorker, SagaWorkerHandle } from "../src/main";
 
@@ -24,12 +24,13 @@ describe("saga-worker (e2e: live Temporal + Postgres)", () => {
 
   it("approved order writes an OrderAccepted event (v2) to the store/outbox", async () => {
     const orderId = randomUUID();
-    await appendEvent(prisma, {
+    await appendWithExpectedVersion(prisma, {
       tenantId: "berlin",
-      aggregateType: "ORDER",
+      aggregateType: AGGREGATE_TYPES.ORDER,
       aggregateId: orderId,
+      expectedVersion: 0,
       eventType: EVENT_TYPES.ORDER_PLACED,
-      payload: { orderId },
+      payload: { orderId, customerId: "c-1", items: [], totalAmount: 1200 },
     });
 
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {

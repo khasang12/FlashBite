@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { appendEvent } from "@flashbite/shared";
-import { EVENT_TYPES } from "@flashbite/contracts";
+import { appendWithExpectedVersion } from "@flashbite/shared";
+import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
 import { createActivities } from "../src/activities";
 
 describe("saga activities", () => {
@@ -11,7 +11,7 @@ describe("saga activities", () => {
 
   it("recordOrderAccepted appends an OrderAccepted event at the next version", async () => {
     const orderId = randomUUID();
-    await appendEvent(prisma, { tenantId: "berlin", aggregateType: "ORDER", aggregateId: orderId, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId } }); // v1
+    await appendWithExpectedVersion(prisma, { tenantId: "berlin", aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId, expectedVersion: 0, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId, customerId: "c-1", items: [], totalAmount: 1000 } }); // v1
     const activities = createActivities(prisma);
     await activities.recordOrderAcceptedActivity("berlin", orderId);
 
