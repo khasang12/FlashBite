@@ -43,7 +43,13 @@ export function useOrderStream(
       headers: { Authorization: `Bearer ${token}` },
       signal: ctrl.signal,
       openWhenHidden: true,
-      onopen: async (_response: Response) => { onOpenRef.current?.(); },
+      onopen: async (response: Response) => {
+        if (response.status === 401) {
+          useAuthStore.getState().logout(); // token cleared -> effect dep changes -> stream torn down; AuthGate -> login
+          throw new Error("unauthorized"); // stop fetchEventSource from proceeding/retrying
+        }
+        onOpenRef.current?.();
+      },
       onmessage: (msg) => {
         const parsed = parseStreamData(msg.data);
         if (parsed) onEventRef.current(parsed);

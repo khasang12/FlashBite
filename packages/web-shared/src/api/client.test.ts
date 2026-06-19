@@ -10,6 +10,7 @@ import {
   listOrders,
   placeOrder,
   reportLocation,
+  UnauthorizedError,
   type PlaceOrderRequest,
 } from "./client";
 
@@ -176,5 +177,20 @@ describe("api client", () => {
     expect(lastUrl()).toBe("/api/read/admin/drivers");
     expect(lastHeaders().Authorization).toBe("Bearer test-token");
     expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+  });
+
+  it("on 401, clears the session and throws UnauthorizedError", async () => {
+    useAuthStore.setState({ token: "expired", claims: { sub: "u", tenantId: "berlin", role: "merchant" } });
+    fetchMock.mockResolvedValue(new Response("", { status: 401 }));
+    await expect(listOrders()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().claims).toBeNull();
+  });
+
+  it("does not clear the session on a non-401 error", async () => {
+    useAuthStore.setState({ token: "t", claims: { sub: "u", tenantId: "berlin", role: "merchant" } });
+    fetchMock.mockResolvedValue(new Response("", { status: 500 }));
+    await expect(listOrders()).rejects.toThrow();
+    expect(useAuthStore.getState().token).toBe("t"); // still logged in
   });
 });
