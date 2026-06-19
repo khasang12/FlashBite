@@ -5,6 +5,7 @@
   "packageManager": "pnpm@9.1.0",
   "scripts": {
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:schemas": "pnpm register:schemas",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:nuke": "docker compose -f infra/docker-compose.yml down -v",
     "infra:ps": "docker compose -f infra/docker-compose.yml ps",
