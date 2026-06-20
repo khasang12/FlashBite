@@ -52,7 +52,7 @@ export {
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
-export { statusFromEventType, upsertOrder, applyOrderEvent, type OrderStreamEvent } from "./orders/order-events";
+export { statusFromEventType, upsertOrder, applyOrderEvent, cancelReasonLabel, type OrderStreamEvent } from "./orders/order-events";
 export {
   aggregateGmv, gmvByTenant, statusBreakdown, topSkus, gmvOverTime, orderCounts, replaceTenantOrders,
   type TenantGmv, type TenantStatusCounts, type SkuCount, type GmvBucket, type OrderCounts,
