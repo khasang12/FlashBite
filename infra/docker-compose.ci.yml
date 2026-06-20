@@ -17,6 +17,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
 
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v24.2.7

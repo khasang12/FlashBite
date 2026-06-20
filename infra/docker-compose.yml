@@ -12,6 +12,7 @@ services:
       - "5434:5432"
     volumes:
       - pg_app_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flashbite -d flashbite_write"]
       interval: 5s
