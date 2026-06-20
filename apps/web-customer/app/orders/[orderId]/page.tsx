@@ -2,6 +2,9 @@
 import { use, useEffect, useState } from "react";
 import {
   getOrder,
+  fetchOrderPayment,
+  paymentStatusLabel,
+  cancelReasonLabel,
   StatusPill,
   Card,
   CardContent,
@@ -45,6 +48,7 @@ function OrderTrackingContent({
   const [waiting, setWaiting] = useState(true);
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setStopped(false);
@@ -64,6 +68,8 @@ function OrderTrackingContent({
       if (o) {
         setOrder(o);
         setWaiting(false);
+        const p = await fetchOrderPayment(orderId).catch(() => null);
+        if (active && p) setPaymentStatus(p.status);
         if (TERMINAL.includes(o.status)) return; // resolved — stop polling
       } else {
         misses += 1;
@@ -108,6 +114,15 @@ function OrderTrackingContent({
                   <span className="font-semibold">Status</span>
                   <StatusPill status={order.status} />
                 </div>
+                {paymentStatusLabel(paymentStatus) && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Payment</span>
+                    <span className="font-semibold">{paymentStatusLabel(paymentStatus)}</span>
+                  </div>
+                )}
+                {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (
+                  <p className="text-sm text-destructive">{cancelReasonLabel(order.cancelReason)}</p>
+                )}
                 {!isTerminal && !stopped && (
                   <p className="text-sm text-muted-foreground">
                     Waiting for the merchant… (saga SLA timer running)
