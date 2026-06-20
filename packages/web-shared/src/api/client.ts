@@ -1,4 +1,4 @@
-import type { OrderItem, OrderView } from "@flashbite/contracts";
+import type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
 
 export interface PlaceOrderRequest {
@@ -65,6 +65,13 @@ export async function getOrder(orderId: string): Promise<OrderView | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`getOrder failed: ${res.status}`);
   return (await res.json()) as OrderView;
+}
+
+/** GET /orders/:id/payment via the same-origin read proxy. `status` is null when no payment exists yet. */
+export async function fetchOrderPayment(orderId: string): Promise<OrderPaymentView> {
+  const res = await authedFetch(`/api/read/orders/${encodeURIComponent(orderId)}/payment`);
+  if (!res.ok) throw new Error(`fetchOrderPayment failed: ${res.status}`);
+  return (await res.json()) as OrderPaymentView;
 }
 
 /** GET /merchant/orders via the same-origin read proxy. Returns all orders for the tenant. */

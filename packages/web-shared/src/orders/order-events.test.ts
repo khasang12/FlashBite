@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { statusFromEventType, applyOrderEvent, upsertOrder, cancelReasonLabel } from "./order-events";
+import { statusFromEventType, applyOrderEvent, upsertOrder, cancelReasonLabel, paymentStatusLabel } from "./order-events";
 import type { OrderView } from "@flashbite/contracts";
 
 const ov = (orderId: string, status: string, updatedAt: string): OrderView => ({
@@ -58,6 +58,20 @@ describe("applyOrderEvent cancelReason", () => {
     const out = applyOrderEvent([row()], { orderId: "o-1", eventType: "OrderAccepted" });
     expect(out[0].status).toBe("ACCEPTED");
     expect(out[0].cancelReason).toBeUndefined();
+  });
+});
+
+describe("paymentStatusLabel", () => {
+  it("maps known statuses to customer-friendly wording", () => {
+    expect(paymentStatusLabel("AUTHORIZED")).toBe("Authorized");
+    expect(paymentStatusLabel("CAPTURED")).toBe("Paid");
+    expect(paymentStatusLabel("VOIDED")).toBe("Voided");
+    expect(paymentStatusLabel("DECLINED")).toBe("Declined");
+  });
+  it("returns empty string for null/undefined/unknown", () => {
+    expect(paymentStatusLabel(null)).toBe("");
+    expect(paymentStatusLabel(undefined)).toBe("");
+    expect(paymentStatusLabel("WAT")).toBe("");
   });
 });
 

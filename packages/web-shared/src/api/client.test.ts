@@ -3,6 +3,7 @@ import { useAuthStore } from "../store/auth-store";
 import {
   acceptOrder,
   declineOrder,
+  fetchOrderPayment,
   getAdminDrivers,
   getAdminOrders,
   getNearbyDrivers,
@@ -177,6 +178,22 @@ describe("api client", () => {
     expect(lastUrl()).toBe("/api/read/admin/drivers");
     expect(lastHeaders().Authorization).toBe("Bearer test-token");
     expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+  });
+
+  it("fetchOrderPayment GETs the payment path with Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: "AUTHORIZED" }), { status: 200 }));
+
+    const res = await fetchOrderPayment("o-1");
+
+    expect(res).toEqual({ status: "AUTHORIZED" });
+    expect(lastUrl()).toBe("/api/read/orders/o-1/payment");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
+  });
+
+  it("fetchOrderPayment passes through { status: null }", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
+    expect(await fetchOrderPayment("o-2")).toEqual({ status: null });
   });
 
   it("on 401, clears the session and throws UnauthorizedError", async () => {
