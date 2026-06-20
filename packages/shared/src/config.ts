@@ -8,6 +8,7 @@ export interface AppConfig {
   appDatabaseUrl: string;
   kafkaBrokers: string[];
   schemaRegistryUrl: string;
+  paymentsUrl: string;
   defaultTenantId: string;
   mongoUri: string;
   redisClusterNodes: RedisNode[];
@@ -58,6 +59,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     appDatabaseUrl: env.APP_DATABASE_URL ?? databaseUrl,
     kafkaBrokers: (env.KAFKA_BROKERS ?? "localhost:9092").split(","),
     schemaRegistryUrl: env.SCHEMA_REGISTRY_URL ?? "http://localhost:18081",
+    paymentsUrl: env.PAYMENTS_URL ?? "http://localhost:3004",
     defaultTenantId: env.DEFAULT_TENANT_ID ?? DEFAULT_TENANT_ID,
     mongoUri: env.MONGO_URI ?? "mongodb://localhost:27017/flashbite_read",
     redisClusterNodes,
