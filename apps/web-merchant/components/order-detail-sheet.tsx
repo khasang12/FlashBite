@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, Button, StatusPill,
-  acceptOrder, declineOrder, ORDER_STATUS, type OrderView,
+  acceptOrder, declineOrder, cancelReasonLabel, ORDER_STATUS, type OrderView,
 } from "@flashbite/web-shared";
 
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
@@ -43,7 +43,12 @@ export function OrderDetailSheet({
               <SheetTitle>Order #{order.orderId.slice(0, 8)}</SheetTitle>
               <SheetDescription>Order details and merchant actions.</SheetDescription>
             </SheetHeader>
-            <div className="mt-3"><StatusPill status={order.status} /></div>
+            <div className="mt-3 flex items-center gap-2">
+              <StatusPill status={order.status} />
+              {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (
+                <span className="text-xs text-muted-foreground">{cancelReasonLabel(order.cancelReason)}</span>
+              )}
+            </div>
             <div className="mt-4 text-sm text-muted-foreground">Customer</div>
             <div className="font-semibold">{order.customerId}</div>
             <div className="mt-4 text-sm text-muted-foreground">Items</div>
