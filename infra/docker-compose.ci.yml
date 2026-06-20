@@ -25,6 +25,10 @@ services:
       - start
       - --kafka-addr=internal://0.0.0.0:29092,external://0.0.0.0:9092
       - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
+      # Schema Registry: serve the external listener on 18081 so host :18081 (and the
+      # register:schemas step + Avro tests) can reach it. Without this, redpanda's SR
+      # defaults to :8081 and host :18081 maps to an empty container port.
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --mode=dev-container
       - --smp=1
       - --default-log-level=warn
