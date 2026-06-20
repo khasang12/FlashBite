@@ -1,9 +1,10 @@
 # FlashBite — Architecture (what's built so far)
 
 This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2 +
-Phase 3a + Phase 3b: the walking-skeleton order plane, the telemetry plane, all four frontends, the
+Phase 3a + Phase 3b + Phase 3c: the walking-skeleton order plane, the telemetry plane, all four frontends, the
 verified-JWT identity + Postgres-RLS isolation layer, the event-sourced Order aggregate with
-optimistic concurrency, and Confluent-Avro on the Kafka event bus with an enforced Schema Registry).
+optimistic concurrency, Confluent-Avro on the Kafka event bus with an enforced Schema Registry, and
+a self-built `payments` service with authorize/capture/void and deterministic decline).
 It is deliberately scoped to working code — a "Not yet built" section at the end lists what the
 master spec still defers to later phases.
 
@@ -100,7 +101,8 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
-| `saga-worker` | TS worker + Temporal | — | One workflow per order: charge → race SLA timer vs merchant approval → accept, or refund + cancel. Its accept/cancel activities drive the same Order aggregate (state-machine guarded, expected-version append). |
+| `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
+| `saga-worker` | TS worker + Temporal | — | One workflow per order: **authorize** (via `payments` :3004) → race SLA timer vs merchant approval → **capture** (accept) or **void** (decline / SLA breach). A declined authorize produces `PAYMENT_FAILED` → `OrderCancelled`. Its accept/cancel activities drive the same Order aggregate (state-machine guarded, expected-version append). |
 | `telemetry-worker` | TS worker | — | Consumes `telemetry-streams`, `GEOADD`s drivers into the per-tenant Redis geo key. |
 | `web-customer` | Next.js | 3100 | Storefront: menu, cart, checkout, live order tracking. |
 | `web-merchant` | Next.js | 3101 | Order queue (live SSE), accept/decline. |
@@ -108,13 +110,15 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | `web-admin` | Next.js | 3103 | Operator console (logs in as `operator@flashbite.test`): cross-tenant GMV/analytics charts, per-tenant driver maps, combined orders — served by the `/admin/*` endpoints. |
 
 **Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
-topic + key helpers, `OrderView`, `.avsc` Avro schemas + subject map), `messaging` (Avro serde +
+topic + key helpers, `OrderView`, `.avsc` Avro schemas + subject map, `PAYMENT_FAILED` cancel reason), `messaging` (Avro serde +
 Schema Registry client + header encode/decode + publish/consume helpers + `register:schemas`
 script), `shared` (Prisma client + optional restricted-role URL, `withTenantTransaction` for the
 RLS GUC, the pure `Order` aggregate + `aggregate-store` load/append-with-expected-version, Mongo +
 Redis clients), `tenant-context` (verify-JWT `TokenVerifier` + `AuthMiddleware` →
 AsyncLocalStorage `{tenantId, role, sub}`, `@Roles`/`RolesGuard`), `web-shared` (design system, API
 client, auth store + `AuthGate`/`LoginForm`, stores, SSE hook, geo + analytics helpers).
+
+**Infrastructure:** `flashbite_write` (event store, outbox, users — main Postgres DB) and `flashbite_payments` (payments bounded context — separate Postgres DB, provisioned by `infra/postgres-init/01-create-payments-db.sql` on first volume init; CI: same Postgres instance, different DB).
 
 ---
 
@@ -148,7 +152,7 @@ sequenceDiagram
   and saga
     KF->>SG: OrderPlaced
     SG->>TP: start workflow id tenantId-orderId
-    TP->>SG: chargePayment (fake)
+    TP->>SG: authorizePayment (payments :3004)
   end
 ```
 
@@ -161,6 +165,7 @@ sequenceDiagram
   participant W as write-api
   participant TP as Temporal
   participant SG as saga-worker
+  participant PAY as payments
   participant PG as Postgres
   participant KF as Kafka
   participant PJ as projection-worker
@@ -168,18 +173,25 @@ sequenceDiagram
   participant R as read-api
 
   Note over TP: workflow racing SLA timer vs merchant signal
-  alt accepted in time
+  alt payment declined (authorize returns DECLINED)
+    TP->>SG: authorizePayment returns DECLINED
+    SG->>PG: append OrderCancelled(PAYMENT_FAILED)
+  else accepted in time
     Merch->>W: POST /orders/ID/accept
     W->>TP: signal merchantApproval(true)
+    TP->>SG: capturePayment (payments :3004)
+    SG->>PAY: POST /payments/:id/capture
     TP->>SG: recordOrderAccepted
     SG->>PG: append OrderAccepted
   else declined
     Merch->>W: POST /orders/ID/decline
     W->>TP: signal merchantApproval(false)
-    TP->>SG: refund then recordOrderCancelled(DECLINED)
+    TP->>SG: voidPayment then recordOrderCancelled(DECLINED)
+    SG->>PAY: POST /payments/:id/void
     SG->>PG: append OrderCancelled(reason)
   else SLA breach (no signal)
-    TP->>SG: refund then recordOrderCancelled(SLA_BREACH)
+    TP->>SG: voidPayment then recordOrderCancelled(SLA_BREACH)
+    SG->>PAY: POST /payments/:id/void
     SG->>PG: append OrderCancelled(reason)
   end
   PG->>KF: (via outbox) OrderAccepted / OrderCancelled
@@ -189,7 +201,7 @@ sequenceDiagram
 ```
 
 **Order status:** `PLACED -> ACCEPTED` or `PLACED -> CANCELLED` (`cancelReason` =
-`SLA_BREACH` | `DECLINED`). The `web-customer` tracking page polls `GET /orders/:id`; the
+`SLA_BREACH` | `DECLINED` | `PAYMENT_FAILED`). The `web-customer` tracking page polls `GET /orders/:id`; the
 `web-merchant` and `web-admin` views update live over SSE.
 
 ### Event-sourced write model (Phase 3a)
@@ -241,8 +253,7 @@ flowchart LR
   version behind a `(tenantId, aggregateId, version)` unique constraint, so two concurrent writers
   for the same order can't both win — the loser gets a `ConcurrencyError`.
 - **Version-guarded projection:** the read model only moves forward (`existing.version < event.version`).
-- **Saga compensation:** a decline or SLA breach triggers a refund activity before recording the
-  cancellation — the textbook saga compensation shape (payment is a fake activity today).
+- **Saga compensation (Phase 3c):** on decline or SLA breach the workflow voids the authorization before recording the cancellation — the textbook saga compensation shape. On `PAYMENT_FAILED` (authorization declined at the start), the workflow goes straight to cancellation without a void. The `payments` service is a real NestJS service with its own `flashbite_payments` DB (not a fake activity).
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
@@ -464,9 +475,9 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 - **Aggregate snapshots + generic command bus** — the aggregate replays full event history on every
   load; snapshotting and a reusable command-dispatch abstraction are backlogged (see
   `docs/superpowers/backlog.md`).
-- **Real payment provider** — charge/refund are fake Temporal activities.
 - **Driver dispatch** — closing the order↔driver loop (saga assigns a nearby driver; driver
   accept/pickup/deliver).
+- **Real Stripe integration** — the `payments` service implements authorize/capture/void against its own DB; refund, webhook settlement, payment read model, and real Stripe/payment-provider wiring remain backlog.
 - **Identity hardening** — refresh tokens, key persistence/rotation across restarts, user
   management/signup, revocation. Phase 2 ships the core (RS256 login + JWKS + seeded users,
   access-token-only, startup-generated keys).
@@ -489,3 +500,10 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 > registration via `pnpm register:schemas`, producers lookup-only. All 2 produce and 4 consume sites
 > migrated (outbox-poller, projection-worker, saga-worker, read-api SSE feeder, telemetry producer,
 > telemetry-worker).
+>
+> **Completed in Phase 3c:** self-built `payments` service (NestJS :3004, own `flashbite_payments`
+> Postgres DB). Saga workflow rewritten from fake charge/refund activities to real
+> **authorize → capture / void** calls via an HTTP payments-client. Deterministic decline rule
+> (`AUTH_DECLINE_THRESHOLD`) produces `PAYMENT_FAILED` → `OrderCancelled`. Payment operations are
+> idempotent per `(tenantId, orderId)`. Refund / webhook settlement / payment read model / real
+> Stripe remain backlog.

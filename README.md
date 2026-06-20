@@ -76,9 +76,7 @@ flowchart LR
   are governed by the **Schema Registry** at `localhost:18081`, registered via `pnpm
   register:schemas` (BACKWARD compatibility enforced; producers are lookup-only, never auto-
   register). Per-order partition keys (`tenantId:orderId`) preserve ordering.
-- **Temporal sagas** — one workflow per order: charge → per-tenant SLA timer raced against the
-  merchant-approval signal → accept, or compensate (refund + cancellation with a reason). Payment
-  is a fake activity for now.
+- **Temporal sagas + payments service (Phase 3c)** — one workflow per order: **authorize** payment (via the `payments` service :3004) → per-tenant SLA timer raced against the merchant-approval signal → **capture** (accept) or **void** (decline / SLA breach). A deterministic decline rule (`AUTH_DECLINE_THRESHOLD`, default 100 000) produces `PAYMENT_FAILED` → `OrderCancelled`. The payments service owns its own `flashbite_payments` database (Postgres, separate bounded context).
 - **Polyglot persistence** — Postgres (event store), Mongo (read models + inbox), Redis Cluster
   (cache + geo, `tenant:{id}` hash-tag co-location).
 - **Real-time telemetry** — ephemeral driver GPS (`DriverTelemetryStreamed` on `telemetry-streams`)
@@ -104,9 +102,7 @@ flowchart LR
 - **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
   tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
 
-**Planned (later phases):** a real payment provider and **driver dispatch** (closing the
-order↔driver loop). Identity hardening (refresh tokens, key rotation) is backlogged. See
-`docs/superpowers/backlog.md`.
+**Planned (later phases):** **driver dispatch** (closing the order↔driver loop), real Stripe integration (refund / webhook settlement / payment read model). Identity hardening (refresh tokens, key rotation) is backlogged. See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -124,7 +120,8 @@ recharts · react-map-gl · TypeScript · pnpm monorepo · Docker Compose.
 
 ```
 apps/        identity (JWT/JWKS), write-api, read-api, outbox-poller, projection-worker,
-             saga-worker, telemetry-worker, web-customer, web-merchant, web-driver, web-admin
+             saga-worker, telemetry-worker, payments (authorize/capture/void),
+             web-customer, web-merchant, web-driver, web-admin
 packages/    contracts (event types + envelope/key helpers + ROLES/TENANTS + .avsc schemas),
              messaging (Avro serde + Schema Registry client + header/publish/consume helpers
              + register script), shared (Prisma, Mongo, Redis, event-store, tenant-scoped tx),
@@ -148,7 +145,8 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **2** | Identity (verified JWT) + isolation hard mode (Postgres RLS) + operator console + frontend auth | ✅ complete |
 | **3a** | Event-sourced Order aggregate (full ES, optimistic concurrency) | ✅ complete |
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
-| 3 (remaining) | Real payments, driver dispatch | planned |
+| **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
+| 3 (remaining) | Driver dispatch, real Stripe (refund/webhook/read-model) | planned |
 | 4 | Frontend polish + observability story | planned |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
@@ -200,6 +198,9 @@ terminal (or background them):
 ```bash
 pnpm infra:up          # Postgres, Mongo, Redpanda (+Schema Registry :18081), Temporal, Redis Cluster
 pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
+pnpm payments:generate # (Phase 3c) generate Prisma client for flashbite_payments DB
+pnpm payments:db:create # (Phase 3c, one-time on existing volumes) create flashbite_payments DB
+pnpm payments:db:deploy # (Phase 3c) apply payments DB migrations
 pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword
 pnpm register:schemas  # (Phase 3b, one-time) register Avro schemas with BACKWARD compatibility
 ```
@@ -216,7 +217,8 @@ pnpm dev:write-api     # :3001  place orders, relay merchant accept/decline
 pnpm dev:read-api      # :3002  queries, SSE, telemetry ingest + nearby
 pnpm dev:outbox        # outbox  -> Kafka
 pnpm dev:projection    # Kafka   -> Mongo read model
-pnpm dev:saga          # Temporal order-lifecycle workflow (charge / SLA / accept|refund)
+pnpm dev:saga          # Temporal order-lifecycle workflow (authorize → capture/void)
+pnpm dev:payments      # :3004  payments service (authorize / capture / void)
 pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
 
 # frontends (each proxies /api/identity -> :3003, /api/read -> :3002, /api/write -> :3001)
@@ -237,8 +239,17 @@ pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 |---|---|---|---|
 | Customer | <http://localhost:3100> | write-api | <http://localhost:3001> |
 | Merchant | <http://localhost:3101> | read-api | <http://localhost:3002> |
-| Driver | <http://localhost:3102> | Temporal UI | <http://localhost:8080> |
-| Admin | <http://localhost:3103> | Redpanda Console | <http://localhost:8085> |
+| Driver | <http://localhost:3102> | payments | <http://localhost:3004> |
+| Admin | <http://localhost:3103> | Temporal UI | <http://localhost:8080> |
+| identity | <http://localhost:3003> | Redpanda Console | <http://localhost:8085> |
+
+**New env vars (Phase 3c):**
+
+| Variable | Default / example | Purpose |
+|---|---|---|
+| `PAYMENTS_URL` | `http://localhost:3004` | Saga payments-client base URL |
+| `PAYMENTS_DATABASE_URL` | `postgresql://flashbite:…@localhost:5434/flashbite_payments` | Prisma DSN for the payments service |
+| `AUTH_DECLINE_THRESHOLD` | `100000` (pence) | Orders above this amount are deterministically declined (demo decline rule) |
 
 Tenancy + role come from the **verified JWT** (`Authorization: Bearer`) — the frontends obtain it at
 login and send it for you; the old `X-Tenant-ID` header is no longer accepted. Maps use a public
