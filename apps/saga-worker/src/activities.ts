@@ -2,8 +2,10 @@ import type { PrismaClient } from "@prisma/client";
 import {
   loadAggregate, appendWithExpectedVersion,
   foldOrder, accept, cancel, INITIAL_ORDER_STATE, InvalidTransitionError,
+  loadConfig,
 } from "@flashbite/shared";
 import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
+import { authorizePayment, capturePayment, voidPayment } from "./payments-client";
 
 /**
  * Activities load the Order aggregate, validate the command, and append at the loaded
@@ -12,14 +14,14 @@ import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
  */
 export function createActivities(prisma: PrismaClient) {
   return {
-    async chargePaymentActivity(tenantId: string, orderId: string, amount: number): Promise<void> {
-      // Fake payment gateway. Phase 3c swaps in a real provider.
-      // eslint-disable-next-line no-console
-      console.log(`[charge] tenant=${tenantId} order=${orderId} amount=${amount}`);
+    async authorizePaymentActivity(tenantId: string, orderId: string, amount: number): Promise<{ authorized: boolean }> {
+      return authorizePayment(loadConfig().paymentsUrl, tenantId, orderId, amount);
     },
-    async refundPaymentActivity(tenantId: string, orderId: string, amount: number): Promise<void> {
-      // eslint-disable-next-line no-console
-      console.log(`[refund] tenant=${tenantId} order=${orderId} amount=${amount}`);
+    async capturePaymentActivity(tenantId: string, orderId: string): Promise<void> {
+      await capturePayment(loadConfig().paymentsUrl, tenantId, orderId);
+    },
+    async voidPaymentActivity(tenantId: string, orderId: string): Promise<void> {
+      await voidPayment(loadConfig().paymentsUrl, tenantId, orderId);
     },
     async recordOrderAcceptedActivity(tenantId: string, orderId: string): Promise<void> {
       const { state, version } = await loadAggregate(prisma, { tenantId, aggregateId: orderId }, foldOrder, INITIAL_ORDER_STATE);

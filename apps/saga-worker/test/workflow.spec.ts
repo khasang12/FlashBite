@@ -13,9 +13,11 @@ describe("orderLifecycleWorkflow", () => {
   });
 
   const calls: string[] = [];
+  let authorizeResult = true; // toggled per test
   const stubActivities = {
-    async chargePaymentActivity() { calls.push("charge"); },
-    async refundPaymentActivity() { calls.push("refund"); },
+    async authorizePaymentActivity() { calls.push("authorize"); return { authorized: authorizeResult }; },
+    async capturePaymentActivity() { calls.push("capture"); },
+    async voidPaymentActivity() { calls.push("void"); },
     async recordOrderAcceptedActivity() { calls.push("accepted"); },
     async recordOrderCancelledActivity(_t: string, _o: string, reason: string) { calls.push(`cancelled:${reason}`); },
   };
@@ -31,7 +33,7 @@ describe("orderLifecycleWorkflow", () => {
   }
 
   it("ACCEPTED when the approval signal arrives before the SLA", async () => {
-    calls.length = 0;
+    calls.length = 0; authorizeResult = true;
     const result = await runWorker(async () => {
       const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
         taskQueue: "test-sla",
@@ -42,11 +44,11 @@ describe("orderLifecycleWorkflow", () => {
       return handle.result();
     });
     expect(result).toBe("ACCEPTED");
-    expect(calls).toEqual(["charge", "accepted"]);
+    expect(calls).toEqual(["authorize", "capture", "accepted"]);
   });
 
   it("CANCELLED_SLA when no signal arrives before the SLA (time-skipped)", async () => {
-    calls.length = 0;
+    calls.length = 0; authorizeResult = true;
     const result = await runWorker(async () => {
       const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
         taskQueue: "test-sla",
@@ -56,11 +58,11 @@ describe("orderLifecycleWorkflow", () => {
       return handle.result();
     });
     expect(result).toBe("CANCELLED_SLA");
-    expect(calls).toEqual(["charge", "refund", "cancelled:SLA_BREACH"]);
+    expect(calls).toEqual(["authorize", "void", "cancelled:SLA_BREACH"]);
   });
 
   it("CANCELLED_DECLINED when the merchant declines", async () => {
-    calls.length = 0;
+    calls.length = 0; authorizeResult = true;
     const result = await runWorker(async () => {
       const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
         taskQueue: "test-sla",
@@ -71,6 +73,21 @@ describe("orderLifecycleWorkflow", () => {
       return handle.result();
     });
     expect(result).toBe("CANCELLED_DECLINED");
-    expect(calls).toEqual(["charge", "refund", "cancelled:DECLINED"]);
+    expect(calls).toEqual(["authorize", "void", "cancelled:DECLINED"]);
+  });
+
+  it("CANCELLED_PAYMENT_FAILED when authorize is declined (no capture/void)", async () => {
+    calls.length = 0; authorizeResult = false;
+    const result = await runWorker(async () => {
+      const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
+        taskQueue: "test-sla",
+        workflowId: `berlin:payfail-${Date.now()}`,
+        args: [{ tenantId: "berlin", orderId: "o4", totalAmount: 100000, slaSeconds: 300 }],
+      });
+      return handle.result();
+    });
+    expect(result).toBe("CANCELLED_PAYMENT_FAILED");
+    expect(calls).toEqual(["authorize", "cancelled:PAYMENT_FAILED"]);
+    authorizeResult = true;
   });
 });
