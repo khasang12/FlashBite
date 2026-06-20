@@ -254,10 +254,30 @@ flowchart LR
   for the same order can't both win — the loser gets a `ConcurrencyError`.
 - **Version-guarded projection:** the read model only moves forward (`existing.version < event.version`).
 - **Saga compensation (Phase 3c):** on decline or SLA breach the workflow voids the authorization before recording the cancellation — the textbook saga compensation shape. On `PAYMENT_FAILED` (authorization declined at the start), the workflow goes straight to cancellation without a void. The `payments` service is a real NestJS service with its own `flashbite_payments` DB (not a fake activity).
+- **Payment UI is read-only and read-through (Phase 3c-ii):** payment state stays owned by the `payments` service — it is **not** copied into the order read model. The customer tracking page reads it live via read-api (see below); cancelled orders render a readable reason via the shared `cancelReasonLabel` helper.
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
   serde lives in `@flashbite/messaging`; schema definitions live in `@flashbite/contracts`.
+
+### Payment UI read path (Phase 3c-ii)
+
+The customer tracking page shows payment progress without copying payment state into the order read
+model. read-api exposes `GET /orders/:orderId/payment` (tenant derived from the JWT, never a param),
+which calls the `payments` service server-to-server (`GET /payments/:tenantId/:orderId`) via a small
+`PaymentsClient` and returns `{ status }` or `{ status: null }` (200 with `null` when no payment
+exists yet — distinct from an error). Frontends never call `payments` directly. The customer page
+polls this on the same cadence as the order, mapping the status to a friendly label
+(`paymentStatusLabel`: AUTHORIZED to "Authorized", CAPTURED to "Paid", VOIDED to "Voided", DECLINED
+to "Declined").
+
+```
+web-customer tracking
+  -> GET /api/read/orders/:id            (order status, polled)
+  -> GET /api/read/orders/:id/payment    (payment status, polled)
+read-api  -> GET payments :3004 /payments/{tenant}/{order}
+          -> flashbite_payments ledger
+```
 
 ### Event bus: Avro + Schema Registry (Phase 3b)
 

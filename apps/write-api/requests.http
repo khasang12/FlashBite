@@ -255,6 +255,15 @@ Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 GET {{readUrl}}/orders/{{orderId}}
 Authorization: Bearer {{loginTokyo.response.body.$.accessToken}}
 
+### Phase 3c-ii — payment status for an order (tenant from JWT, read-through to payments).
+### 200 { "status": "AUTHORIZED" | "CAPTURED" | "VOIDED" | "DECLINED" } or { "status": null }.
+GET {{readUrl}}/orders/{{orderId}}/payment
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
+
+### Internal payments read (no JWT) — what read-api calls server-to-server. @payments = :3004.
+### Run pnpm dev:payments first. 200 { orderId, status, amount } or 404 when no payment.
+GET http://localhost:3004/payments/berlin/{{orderId}}
+
 ### SSE merchant feed (streams live order events for the tenant).
 ### This connection stays OPEN — place an order on write-api in another request
 ### and watch the event arrive here. Cancel the request to close the stream.
