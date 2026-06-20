@@ -203,3 +203,8 @@ export interface PaymentResponse {
   paymentId: string;
   outcome: "authorized" | "declined" | "captured" | "voided";
 }
+
+/** Read-side projection of a payment for the order-tracking UI. `status` is null when no payment exists yet. */
+export interface OrderPaymentView {
+  status: PaymentStatus | null;
+}
