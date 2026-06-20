@@ -248,6 +248,49 @@ flowchart LR
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
   serde lives in `@flashbite/messaging`; schema definitions live in `@flashbite/contracts`.
 
+### Event bus: Avro + Schema Registry (Phase 3b)
+
+Every Kafka message is **Confluent-Avro**: the value is the Avro-encoded event payload, the envelope
+metadata rides in **headers**, and the partition key stays `tenantId:orderId`. On produce,
+`publishEnvelope` looks up the subject's schema id (lookup-only) and encodes; on consume,
+`readEnvelope` reads the id from the bytes, fetches the writer schema, and decodes — reconstructing
+the same `EventEnvelope` the handlers already expect. The serde lives in `@flashbite/messaging`; the
+`.avsc` files and subject map live in `@flashbite/contracts`.
+
+```mermaid
+flowchart TB
+  WA["write-api - place / accept"]
+  PG[("Postgres - event_store + outbox")]
+  OB["outbox-poller - polls PENDING"]
+  PUB["publishEnvelope - build headers + Avro-encode payload"]
+  TOP["order-events Kafka topic - key + headers + Avro value"]
+  RD["readEnvelope - parse headers + Avro-decode"]
+  PJ["projection-worker to Mongo"]
+  SG["saga-worker to Temporal"]
+  SSE["read-api SSE feeder to clients"]
+  SR["Schema Registry :18081 - BACKWARD, lookup-only"]
+
+  WA --> PG --> OB --> PUB --> TOP --> RD
+  RD --> PJ
+  RD --> SG
+  RD --> SSE
+  PUB -.->|"look up schema id"| SR
+  SR -.->|"fetch schema by id"| RD
+```
+
+The wire shape of one message — only the payload is schema-governed; the headers are plain strings
+(which is why the consumer fails closed on a missing `tenantId`/`eventType`/`eventId`):
+
+```mermaid
+flowchart LR
+  K["key - tenantId:orderId"]
+  H["headers - eventType, tenantId, eventId, version, occurredAt"]
+  subgraph V["value (Avro)"]
+    M["0x00 magic"] --> SID["schema id, 4 bytes"] --> BIN["Avro binary payload"]
+  end
+  K --- H --- V
+```
+
 ---
 
 ## 4. Read plane (CQRS query side)
