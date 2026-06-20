@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "name": "OrderPlaced",
+  "namespace": "com.flashbite.events",
+  "fields": [
+    { "name": "orderId", "type": "string" },
+    { "name": "customerId", "type": "string" },
+    {
+      "name": "items",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "OrderItem",
+          "fields": [
+            { "name": "sku", "type": "string" },
+            { "name": "qty", "type": "int" },
+            { "name": "price", "type": "double" }
+          ]
+        }
+      }
+    },
+    { "name": "totalAmount", "type": "double" }
+  ]
+}

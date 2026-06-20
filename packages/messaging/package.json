@@ -1,0 +1,17 @@
+{
+  "name": "@flashbite/messaging",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@kafkajs/confluent-schema-registry": "^3.3.0",
+    "@flashbite/contracts": "workspace:*"
+  },
+  "peerDependencies": {
+    "kafkajs": "2.2.4"
+  },
+  "devDependencies": {
+    "kafkajs": "2.2.4"
+  }
+}

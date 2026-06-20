@@ -8,6 +8,7 @@ import { AppModule } from "../src/app.module";
 import { TOPICS, type EventEnvelope, type DriverTelemetryPayload } from "@flashbite/contracts";
 import { TokenVerifier } from "@flashbite/tenant-context";
 import { createTestAuth, type TestAuth } from "@flashbite/tenant-context/testing";
+import { createRegistry, readEnvelope } from "@flashbite/messaging";
 
 describe("read-api telemetry ingest (e2e)", () => {
   let app: INestApplication;
@@ -32,6 +33,7 @@ describe("read-api telemetry ingest (e2e)", () => {
 
   it("POST /drivers/:id/location publishes a DriverTelemetryStreamed envelope to telemetry-streams", async () => {
     const driverId = `d-${randomUUID()}`;
+    const registry = createRegistry(process.env.SCHEMA_REGISTRY_URL ?? "http://localhost:18081");
 
     const admin = kafka.admin();
     await admin.connect();
@@ -58,7 +60,8 @@ describe("read-api telemetry ingest (e2e)", () => {
         consumer.run({
           eachMessage: async ({ partition, message }) => {
             if (BigInt(message.offset) < (startOffsets.get(partition) ?? 0n)) return;
-            const env = JSON.parse(message.value!.toString()) as EventEnvelope;
+            const env = await readEnvelope(registry, message);
+            if (!env) return;
             if ((env.payload as DriverTelemetryPayload).driverId === driverId) {
               clearTimeout(timer);
               resolve(env);

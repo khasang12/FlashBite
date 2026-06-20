@@ -9,9 +9,9 @@ import {
   EVENT_TYPES,
   ORDER_SAGA,
   TOPICS,
-  type EventEnvelope,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
+import { createRegistry, readEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { createActivities } from "./activities";
 
 export interface SagaWorkerHandle {
@@ -49,13 +49,14 @@ export async function startOrderConsumer(
   consumer: Consumer,
   temporal: TemporalHandle,
   slaSeconds: number,
+  registry: SchemaRegistry,
 ): Promise<SagaWorkerHandle> {
   await consumer.connect();
   await consumer.subscribe({ topic: TOPICS.ORDER_EVENTS, fromBeginning: false });
   await consumer.run({
     eachMessage: async ({ message }) => {
-      if (!message.value) return;
-      const envelope = JSON.parse(message.value.toString()) as EventEnvelope;
+      const envelope = await readEnvelope(registry, message);
+      if (!envelope) return;
       if (envelope.eventType !== EVENT_TYPES.ORDER_PLACED) return;
       const p = envelope.payload as OrderPlacedPayload;
       try {
@@ -84,7 +85,8 @@ async function main(): Promise<void> {
   const temporal = await connectTemporal();
   const kafka = new Kafka({ clientId: "saga-worker", brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
   const consumer = kafka.consumer({ groupId: CONSUMER_GROUPS.SAGA });
-  const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds);
+  const registry = createRegistry(config.schemaRegistryUrl);
+  const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds, registry);
 
   // eslint-disable-next-line no-console
   console.log("saga-worker running");

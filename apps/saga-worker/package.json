@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "@flashbite/contracts": "workspace:*",
+    "@flashbite/messaging": "workspace:*",
     "@flashbite/shared": "workspace:*",
     "@prisma/client": "5.18.0",
     "@temporalio/activity": "1.11.1",

@@ -7,14 +7,19 @@ import {
   TOPICS,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
+import { createRegistry, registerAllSchemas, publishEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { runConsumer } from "../src/main";
+
+const SR_HOST = process.env.SCHEMA_REGISTRY_URL ?? "http://localhost:18081";
 
 describe("projection-worker consumer (integration)", () => {
   let mongo: MongoHandle;
   const kafka = new Kafka({ clientId: "proj-test", brokers: ["localhost:9092"], logLevel: logLevel.NOTHING });
+  const registry: SchemaRegistry = createRegistry(SR_HOST);
 
   beforeAll(async () => {
     mongo = await connectMongo();
+    await registerAllSchemas(registry, SR_HOST);
   });
   afterAll(async () => {
     await mongo.client.close();
@@ -26,14 +31,11 @@ describe("projection-worker consumer (integration)", () => {
     const envelope = buildEnvelope({ tenantId: "berlin", eventType: EVENT_TYPES.ORDER_PLACED, version: 1, payload });
 
     const consumer = kafka.consumer({ groupId: `projection-worker-test-${Date.now()}` });
-    const handle = await runConsumer(consumer, mongo.db);
+    const handle = await runConsumer(consumer, mongo.db, registry);
 
     const producer = kafka.producer();
     await producer.connect();
-    await producer.send({
-      topic: TOPICS.ORDER_EVENTS,
-      messages: [{ key: `berlin:${orderId}`, value: JSON.stringify(envelope) }],
-    });
+    await publishEnvelope(producer, registry, TOPICS.ORDER_EVENTS, `berlin:${orderId}`, envelope);
     await producer.disconnect();
 
     let doc = null;

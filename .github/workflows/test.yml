@@ -39,6 +39,15 @@ jobs:
           docker compose -f infra/docker-compose.ci.yml exec -T redpanda \
             rpk topic create telemetry-streams --partitions 12 --brokers redpanda:29092
 
+      - name: Wait for Schema Registry
+        run: |
+          node -e "const u='http://localhost:18081/subjects';const t=Date.now()+60000;(async function p(){try{const r=await fetch(u);if(r.ok)return console.log('registry ready');}catch{}if(Date.now()>t){console.error('registry not ready');process.exit(1);}setTimeout(p,2000);})();"
+
+      - name: Register Avro schemas
+        run: pnpm register:schemas
+        env:
+          SCHEMA_REGISTRY_URL: http://localhost:18081
+
       - name: Generate Prisma client + apply migrations
         run: |
           pnpm --filter @flashbite/shared exec prisma generate --schema prisma/schema.prisma

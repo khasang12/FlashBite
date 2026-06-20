@@ -5,6 +5,7 @@ const { join } = require("path");
 const paths = {
   "@flashbite/contracts": ["packages/contracts/src/index.ts"],
   "@flashbite/shared": ["packages/shared/src/index.ts"],
+  "@flashbite/messaging": ["packages/messaging/src/index.ts"],
   "@flashbite/tenant-context": ["packages/tenant-context/src/index.ts"],
   "@flashbite/tenant-context/testing": ["packages/tenant-context/src/testing.ts"],
   "@flashbite/web-shared": ["packages/web-shared/src/index.ts"],

@@ -71,8 +71,11 @@ flowchart LR
   from its event stream, enforces transition invariants, and writes with optimistic concurrency
   (version check), replacing the prior blind-append approach. `pnpm rebuild:projection` replays
   the full event store into the Mongo read model (ES rebuildability demonstrated end-to-end).
-- **Kafka (via Redpanda)** — JSON envelopes, per-order partition keys (`tenantId:orderId`) for
-  ordering. *(Avro + Schema Registry: planned, Phase 3.)*
+- **Kafka (via Redpanda) — Confluent-Avro (Phase 3b)** — messages carry **Avro-encoded payloads**
+  (value) with envelope metadata (eventId, tenantId, eventType, …) in **Kafka headers**. Schemas
+  are governed by the **Schema Registry** at `localhost:18081`, registered via `pnpm
+  register:schemas` (BACKWARD compatibility enforced; producers are lookup-only, never auto-
+  register). Per-order partition keys (`tenantId:orderId`) preserve ordering.
 - **Temporal sagas** — one workflow per order: charge → per-tenant SLA timer raced against the
   merchant-approval signal → accept, or compensate (refund + cancellation with a reason). Payment
   is a fake activity for now.
@@ -101,9 +104,9 @@ flowchart LR
 - **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
   tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
 
-**Planned (later phases):** **Avro + Schema Registry** (Phase 3), a real payment provider, and
-**driver dispatch** (closing the order↔driver loop). Identity hardening (refresh tokens, key
-rotation) is backlogged. See `docs/superpowers/backlog.md`.
+**Planned (later phases):** a real payment provider and **driver dispatch** (closing the
+order↔driver loop). Identity hardening (refresh tokens, key rotation) is backlogged. See
+`docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -113,19 +116,20 @@ vision in
 
 ## Tech stack
 
-NestJS · Next.js 16 · Kafka (Redpanda) · Temporal · PostgreSQL + Prisma (+ Row-Level Security) ·
-MongoDB · Redis Cluster · `jose` (RS256 JWT / JWKS) · argon2 · recharts · react-map-gl ·
-TypeScript · pnpm monorepo · Docker Compose.
-*(Schema Registry / Avro is planned, not yet wired.)*
+NestJS · Next.js 16 · Kafka (Redpanda) · Confluent Schema Registry · Avro · Temporal · PostgreSQL +
+Prisma (+ Row-Level Security) · MongoDB · Redis Cluster · `jose` (RS256 JWT / JWKS) · argon2 ·
+recharts · react-map-gl · TypeScript · pnpm monorepo · Docker Compose.
 
 ## Monorepo layout
 
 ```
 apps/        identity (JWT/JWKS), write-api, read-api, outbox-poller, projection-worker,
              saga-worker, telemetry-worker, web-customer, web-merchant, web-driver, web-admin
-packages/    contracts (event types + envelope/key helpers + ROLES/TENANTS), shared (Prisma,
-             Mongo, Redis, event-store, tenant-scoped tx), tenant-context (verify-JWT auth
-             context + @Roles guard), web-shared (design system + client + auth store)
+packages/    contracts (event types + envelope/key helpers + ROLES/TENANTS + .avsc schemas),
+             messaging (Avro serde + Schema Registry client + header/publish/consume helpers
+             + register script), shared (Prisma, Mongo, Redis, event-store, tenant-scoped tx),
+             tenant-context (verify-JWT auth context + @Roles guard), web-shared (design system
+             + client + auth store)
 infra/       docker-compose.yml + runbook
 spikes/      Phase 0 de-risking scripts (throwaway)
 docs/        ARCHITECTURE.md, specs, per-phase plans, backlog
@@ -142,7 +146,9 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **0** | Infra up + de-risk Kafka / Temporal / outbox / Redis Cluster | ✅ complete |
 | **1** | Walking skeleton end-to-end (CQRS/ES/outbox, projection, SSE, Temporal saga, telemetry) **+ all four frontends** | ✅ complete |
 | **2** | Identity (verified JWT) + isolation hard mode (Postgres RLS) + operator console + frontend auth | ✅ complete |
-| 3 | Deepen every box to hard mode (full ES, Avro + Schema Registry, real payments, driver dispatch) | planned |
+| **3a** | Event-sourced Order aggregate (full ES, optimistic concurrency) | ✅ complete |
+| **3b** | Avro + Schema Registry on the event bus | ✅ complete |
+| 3 (remaining) | Real payments, driver dispatch | planned |
 | 4 | Frontend polish + observability story | planned |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
@@ -192,9 +198,10 @@ Bring up infra, then the order pipeline and whichever frontend(s) you want — e
 terminal (or background them):
 
 ```bash
-pnpm infra:up          # Postgres, Mongo, Redpanda, Temporal, Redis Cluster
+pnpm infra:up          # Postgres, Mongo, Redpanda (+Schema Registry :18081), Temporal, Redis Cluster
 pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
 pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword
+pnpm register:schemas  # (Phase 3b, one-time) register Avro schemas with BACKWARD compatibility
 ```
 
 > Phase 2 RLS: `pnpm db:deploy` also creates the restricted `flashbite_app` Postgres role.
@@ -272,3 +279,60 @@ Telemetry is **ephemeral** — Redis geospatial only, never Postgres / the event
 Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`), scoped by the
 token's tenant. Manual requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
 [`docs/superpowers/plans/phase-1c-ii-verification.md`](docs/superpowers/plans/phase-1c-ii-verification.md).
+
+---
+
+## Schema evolution & deployment (Phase 3b)
+
+Kafka messages are **Confluent-Avro**: the value is the event payload, envelope metadata
+(`eventType`/`tenantId`/`eventId`/`version`/`occurredAt`) rides in **Kafka headers**, and each message
+carries its **writer schema id** so consumers always decode with the schema the message was written
+with. Schemas are governed in the Schema Registry (`localhost:18081`), registered explicitly by
+`pnpm register:schemas` at **BACKWARD** compatibility; producers are **lookup-only** and never
+auto-register.
+
+To evolve a schema without breaking the live bus, follow these rules.
+
+**1. Only make compatible changes.** Under BACKWARD, you may **add an optional field with a default**
+or **remove a field** — nothing else. `pnpm register:schemas` runs the compatibility check and **fails
+if the change is breaking** (e.g. a new required field with no default), so CI catches it before it
+ships. Adding a required field without a default is not allowed.
+
+**2. Deploy order follows the compatibility mode.** BACKWARD means *a new schema can read old data*,
+so roll out **consumers before producers**:
+
+| Mode | Guarantee | Safe deploy order |
+|---|---|---|
+| **BACKWARD** (current) | new schema reads old data | **consumers first, then producers** |
+| FORWARD | old schema reads new data | producers first, then consumers |
+| FULL / FULL_TRANSITIVE | both directions | **any order** (most foolproof) |
+
+If you'd rather not reason about order, raise the subjects to `FULL_TRANSITIVE` in
+`packages/messaging/src/register.ts` — then any allowed change is safe in any direction and is
+checked against *every* prior version.
+
+**3. Restart producers to emit the new schema.** Producers cache the resolved schema id for the
+process lifetime (`resolveSchemaId`), so a running producer keeps emitting the old version until it
+**restarts**. This is safe under BACKWARD (consumers still read old data), but if you expect the new
+version on the wire, redeploy the producers.
+
+**4. Keep handlers tolerant of field drift.** The registry guarantees a message is *decodable*, not
+that your logic copes. A new field is ignored by old handlers; a removed field reads as `undefined`.
+Read optional fields defensively (`?.` / `??`) in `applyEvent` / `applyTelemetry` / `toStreamEvent`.
+
+> **Note:** Avro governs only the Kafka *transport*. The durable source of truth is the **JSON
+> `event_store` in Postgres**, and `pnpm rebuild:projection` replays it straight through `applyEvent`
+> (bypassing Kafka/Avro). So historical events with older payload shapes hit your newest handler code
+> on every rebuild — handler tolerance of old shapes matters there regardless of the Avro schema.
+
+**Change workflow:**
+
+```bash
+# 1. edit the schema (additive: new field with a `default`)
+#    packages/contracts/avro/<event>.avsc   + the matching TS payload type in contracts
+# 2. register — the BACKWARD check rejects a breaking change locally / in CI
+pnpm register:schemas
+# 3. update producer/handler code
+# 4. deploy consumers first, then producers   (BACKWARD)
+# 5. restart producers so they pick up the new latest schema id
+```

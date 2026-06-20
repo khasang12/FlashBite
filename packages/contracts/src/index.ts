@@ -96,6 +96,22 @@ export const CONSUMER_GROUPS = {
   TELEMETRY: "telemetry-worker",
 } as const;
 
+/** Avro record namespace; the record fullname feeds TopicRecordNameStrategy subjects. */
+export const AVRO_NAMESPACE = "com.flashbite.events";
+
+/** One Avro subject per event type. avsc = filename under packages/contracts/avro/. */
+export const SUBJECTS = [
+  { eventType: EVENT_TYPES.ORDER_PLACED, topic: TOPICS.ORDER_EVENTS, recordName: "OrderPlaced", avsc: "order-placed.avsc" },
+  { eventType: EVENT_TYPES.ORDER_ACCEPTED, topic: TOPICS.ORDER_EVENTS, recordName: "OrderAccepted", avsc: "order-accepted.avsc" },
+  { eventType: EVENT_TYPES.ORDER_CANCELLED, topic: TOPICS.ORDER_EVENTS, recordName: "OrderCancelled", avsc: "order-cancelled.avsc" },
+  { eventType: EVENT_TYPES.DRIVER_TELEMETRY_STREAMED, topic: TOPICS.TELEMETRY_STREAMS, recordName: "DriverTelemetry", avsc: "driver-telemetry.avsc" },
+] as const;
+
+/** Subject name = `${topic}-${namespace}.${recordName}` (TopicRecordNameStrategy). */
+export function subjectFor(topic: string, recordName: string): string {
+  return `${topic}-${AVRO_NAMESPACE}.${recordName}`;
+}
+
 // ---- Read models ----
 export const READ_COLLECTIONS = {
   ORDERS: "orders",
