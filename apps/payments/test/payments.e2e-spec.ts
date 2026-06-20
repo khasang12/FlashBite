@@ -44,4 +44,23 @@ describe("payments HTTP (e2e)", () => {
       .send({ tenantId: "berlin", orderId: "x", idempotencyKey: "k" })
       .expect(400);
   });
+
+  it("GET returns the payment row for an existing order", async () => {
+    const orderId = randomUUID();
+    await request(app.getHttpServer())
+      .post("/payments/authorize")
+      .send({ tenantId: "berlin", orderId, amount: 1200, idempotencyKey: `auth:berlin:${orderId}` })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .get(`/payments/berlin/${orderId}`)
+      .expect(200);
+    expect(res.body).toMatchObject({ orderId, status: "AUTHORIZED", amount: 1200 });
+  });
+
+  it("GET returns 404 for an unknown order", async () => {
+    await request(app.getHttpServer())
+      .get(`/payments/berlin/${randomUUID()}`)
+      .expect(404);
+  });
 });
