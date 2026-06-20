@@ -17,7 +17,7 @@
     "db:reset": "node --env-file=.env packages/shared/node_modules/prisma/build/index.js migrate reset --schema packages/shared/prisma/schema.prisma",
     "db:setup": "pnpm db:deploy && pnpm db:generate && pnpm seed:users",
     "payments:db:create": "docker compose -f infra/docker-compose.yml exec -T postgres psql -U flashbite -d flashbite_write -c \"CREATE DATABASE flashbite_payments\" || true",
-    "payments:generate": "node packages/shared/node_modules/prisma/build/index.js generate --schema apps/payments/prisma/schema.prisma",
+    "payments:generate": "node packages/shared/node_modules/prisma/build/index.js generate --schema apps/payments/prisma/schema.prisma && node apps/payments/scripts/strip-prisma-sourcemaps.cjs",
     "payments:db:deploy": "node --env-file=.env packages/shared/node_modules/prisma/build/index.js migrate deploy --schema apps/payments/prisma/schema.prisma",
     "dev:write-api": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/write-api/src/main.ts",
     "dev:outbox": "node -r @swc-node/register -r tsconfig-paths/register --env-file=.env apps/outbox-poller/src/main.ts",
