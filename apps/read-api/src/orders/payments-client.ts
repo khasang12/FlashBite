@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { loadConfig } from "@flashbite/shared";
 import type { PaymentStatus } from "@flashbite/contracts";
 
@@ -9,6 +9,7 @@ import type { PaymentStatus } from "@flashbite/contracts";
  */
 @Injectable()
 export class PaymentsClient {
+  private readonly logger = new Logger(PaymentsClient.name);
   private readonly baseUrl = loadConfig().paymentsUrl;
 
   async getPayment(tenantId: string, orderId: string): Promise<{ status: PaymentStatus } | null> {
@@ -16,7 +17,10 @@ export class PaymentsClient {
       `${this.baseUrl}/payments/${encodeURIComponent(tenantId)}/${encodeURIComponent(orderId)}`,
     );
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`payments GET failed: ${res.status}`);
+    if (!res.ok) {
+      this.logger.error(`payments GET failed: ${res.status} (tenant=${tenantId} order=${orderId})`);
+      throw new Error(`payments GET failed: ${res.status}`);
+    }
     const body = (await res.json()) as { status: PaymentStatus };
     return { status: body.status };
   }
