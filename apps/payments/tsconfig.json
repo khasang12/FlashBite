@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "ES2021",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

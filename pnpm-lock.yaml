@@ -106,6 +106,49 @@ importers:
         specifier: 2.2.4
         version: 2.2.4
 
+  apps/payments:
+    dependencies:
+      '@flashbite/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@nestjs/common':
+        specifier: 10.4.4
+        version: 10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      '@nestjs/core':
+        specifier: 10.4.4
+        version: 10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@10.4.4)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      '@nestjs/platform-express':
+        specifier: 10.4.4
+        version: 10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@10.4.4)
+      '@prisma/client':
+        specifier: 5.18.0
+        version: 5.18.0(prisma@5.18.0)
+      class-transformer:
+        specifier: 0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: 0.14.1
+        version: 0.14.1
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
+    devDependencies:
+      '@nestjs/testing':
+        specifier: 10.4.4
+        version: 10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@10.4.4)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@10.4.4(@nestjs/common@10.4.4(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@10.4.4))
+      '@types/supertest':
+        specifier: 6.0.2
+        version: 6.0.2
+      prisma:
+        specifier: 5.18.0
+        version: 5.18.0
+      supertest:
+        specifier: 7.0.0
+        version: 7.0.0
+
   apps/projection-worker:
     dependencies:
       '@flashbite/contracts':
