@@ -1,4 +1,4 @@
-import { getTenantId } from "@flashbite/tenant-context";
+import { getTenantId, getAuthContext } from "@flashbite/tenant-context";
 import { tenantKey, driverGeoKey } from "@flashbite/contracts";
 
 /**
@@ -11,6 +11,9 @@ import { tenantKey, driverGeoKey } from "@flashbite/contracts";
 
 /** The current request's tenant id (from the verified JWT via AsyncLocalStorage). */
 export const currentTenant = (): string => getTenantId();
+
+/** The current request's authenticated subject (driverId for driver tokens). */
+export const currentSub = (): string => getAuthContext().sub;
 
 /** Mongo _id for a tenant-owned aggregate: "<tenant>:<id>". */
 export const scopedId = (id: string): string => `${getTenantId()}:${id}`;
