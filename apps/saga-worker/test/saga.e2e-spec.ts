@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { connectTemporal, appendWithExpectedVersion, TemporalHandle } from "@flashbite/shared";
 import { AGGREGATE_TYPES, EVENT_TYPES } from "@flashbite/contracts";
-import { merchantApprovalSignal } from "../src/workflows";
+import { merchantApprovalSignal, confirmPaymentSignal } from "../src/workflows";
 import { startSagaWorker, SagaWorkerHandle } from "../src/main";
 
 describe("saga-worker (e2e: live Temporal + Postgres)", () => {
@@ -36,8 +36,9 @@ describe("saga-worker (e2e: live Temporal + Postgres)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
     });
+    await handle.signal(confirmPaymentSignal);
     await handle.signal(merchantApprovalSignal, true);
     const result = await handle.result();
     expect(result).toBe("ACCEPTED");
