@@ -1,4 +1,4 @@
-import type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contracts";
+import type { OrderItem, OrderView, OrderPaymentView, DispatchView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
 
 export interface PlaceOrderRequest {
@@ -137,4 +137,51 @@ export async function getAdminDrivers(): Promise<TenantNearbyDriver[]> {
   const res = await authedFetch("/api/read/admin/drivers");
   if (!res.ok) throw new Error(`getAdminDrivers failed: ${res.status}`);
   return (await res.json()) as TenantNearbyDriver[];
+}
+
+// --- Driver dispatch (3d-ii) ---
+
+/** POST /drivers/:id/online — add the driver to the tenant online set (read-api). */
+export async function goOnline(driverId: string): Promise<{ driverId: string; online: boolean }> {
+  const res = await authedFetch(`/api/read/drivers/${encodeURIComponent(driverId)}/online`, { method: "POST" });
+  if (!res.ok) throw new Error(`goOnline failed: ${res.status}`);
+  return (await res.json()) as { driverId: string; online: boolean };
+}
+
+/** POST /drivers/:id/offline — remove the driver from the tenant online set (read-api). */
+export async function goOffline(driverId: string): Promise<{ driverId: string; online: boolean }> {
+  const res = await authedFetch(`/api/read/drivers/${encodeURIComponent(driverId)}/offline`, { method: "POST" });
+  if (!res.ok) throw new Error(`goOffline failed: ${res.status}`);
+  return (await res.json()) as { driverId: string; online: boolean };
+}
+
+/** POST /dispatch/:orderId/:action {driverId} — signal the dispatch child workflow (write-api). */
+async function signalDispatch(orderId: string, action: "accept" | "reject" | "pickup" | "deliver", driverId: string): Promise<void> {
+  const res = await authedFetch(`/api/write/dispatch/${encodeURIComponent(orderId)}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ driverId }),
+  });
+  if (!res.ok) throw new Error(`${action}Dispatch failed: ${res.status}`);
+}
+
+export function acceptDispatch(orderId: string, driverId: string): Promise<void> {
+  return signalDispatch(orderId, "accept", driverId);
+}
+export function rejectDispatch(orderId: string, driverId: string): Promise<void> {
+  return signalDispatch(orderId, "reject", driverId);
+}
+export function pickupOrder(orderId: string, driverId: string): Promise<void> {
+  return signalDispatch(orderId, "pickup", driverId);
+}
+export function deliverOrder(orderId: string, driverId: string): Promise<void> {
+  return signalDispatch(orderId, "deliver", driverId);
+}
+
+/** GET /driver/dispatch?driverId=... — the driver's current offer/active job (read-api). */
+export async function getDispatchForDriver(driverId: string): Promise<DispatchView | { status: null }> {
+  const qs = new URLSearchParams({ driverId });
+  const res = await authedFetch(`/api/read/driver/dispatch?${qs.toString()}`);
+  if (!res.ok) throw new Error(`getDispatchForDriver failed: ${res.status}`);
+  return (await res.json()) as DispatchView | { status: null };
 }

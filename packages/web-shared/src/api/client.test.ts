@@ -14,6 +14,7 @@ import {
   reportLocation,
   UnauthorizedError,
   type PlaceOrderRequest,
+  goOnline, goOffline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -219,5 +220,63 @@ describe("api client", () => {
     fetchMock.mockResolvedValue(new Response("", { status: 500 }));
     await expect(listOrders()).rejects.toThrow();
     expect(useAuthStore.getState().token).toBe("t"); // still logged in
+  });
+
+  it("goOnline POSTs the read online endpoint with Bearer", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: true }), { status: 202 }));
+    const res = await goOnline("drv-1");
+    expect(res).toEqual({ driverId: "drv-1", online: true });
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/online");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("goOffline POSTs the read offline endpoint", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: false }), { status: 202 }));
+    await goOffline("drv-1");
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/offline");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+  });
+
+  it("acceptDispatch POSTs the write dispatch accept with driverId body", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await acceptDispatch("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/accept");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders()["Content-Type"]).toBe("application/json");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ driverId: "drv-1" });
+  });
+
+  it("rejectDispatch POSTs the write dispatch reject", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await rejectDispatch("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/reject");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ driverId: "drv-1" });
+  });
+
+  it("pickupOrder POSTs the write dispatch pickup", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await pickupOrder("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/pickup");
+  });
+
+  it("deliverOrder POSTs the write dispatch deliver", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await deliverOrder("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/deliver");
+  });
+
+  it("getDispatchForDriver GETs the driver dispatch read with driverId query", async () => {
+    const view = { tenantId: "berlin", orderId: "o-1", status: "OFFERED", offeredDriverId: "drv-1", version: 1, updatedAt: "t" };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
+    const res = await getDispatchForDriver("drv-1");
+    expect(res).toEqual(view);
+    expect(lastUrl()).toBe("/api/read/driver/dispatch?driverId=drv-1");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getDispatchForDriver passes through { status: null }", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
+    expect(await getDispatchForDriver("drv-1")).toEqual({ status: null });
   });
 });
