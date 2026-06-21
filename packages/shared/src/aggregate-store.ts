@@ -44,6 +44,7 @@ export interface AppendArgs {
   expectedVersion: number;
   eventType: string;
   payload: unknown;
+  topic?: string;
 }
 
 /**
@@ -71,7 +72,7 @@ export async function appendWithExpectedVersion(prisma: PrismaClient, args: Appe
         data: {
           id: envelope.eventId,
           tenantId: args.tenantId,
-          topic: TOPICS.ORDER_EVENTS,
+          topic: args.topic ?? TOPICS.ORDER_EVENTS,
           partitionKey: `${args.tenantId}:${args.aggregateId}`,
           eventType: args.eventType,
           payload: envelope as unknown as Prisma.InputJsonValue,

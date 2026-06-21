@@ -3,16 +3,19 @@ import { Worker, NativeConnection } from "@temporalio/worker";
 import { WorkflowIdReusePolicy } from "@temporalio/client";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, loadConfig, requireAppDatabaseUrl, type TemporalHandle } from "@flashbite/shared";
+import { connectTemporal, loadConfig, requireAppDatabaseUrl, createRedisCluster, type TemporalHandle } from "@flashbite/shared";
 import {
   CONSUMER_GROUPS,
+  DISPATCH_SAGA,
   EVENT_TYPES,
   ORDER_SAGA,
   TOPICS,
+  type OrderAcceptedPayload,
   type OrderPlacedPayload,
 } from "@flashbite/contracts";
 import { createRegistry, readEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { createActivities } from "./activities";
+import { createDispatchActivities } from "./dispatch-activities";
 
 export interface SagaWorkerHandle {
   stop: () => Promise<void>;
@@ -24,13 +27,15 @@ export async function startSagaWorker(): Promise<SagaWorkerHandle> {
   const prisma = new PrismaClient({ datasourceUrl: config.appDatabaseUrl });
   await prisma.$connect();
 
+  const redis = createRedisCluster();
+
   const connection = await NativeConnection.connect({ address: config.temporalAddress });
   const worker = await Worker.create({
     connection,
     namespace: "default",
     taskQueue: ORDER_SAGA.TASK_QUEUE,
     workflowsPath: path.join(__dirname, "workflows.ts"),
-    activities: createActivities(prisma),
+    activities: { ...createActivities(prisma), ...createDispatchActivities(prisma, redis) },
   });
   const runPromise = worker.run();
 
@@ -38,6 +43,7 @@ export async function startSagaWorker(): Promise<SagaWorkerHandle> {
     stop: async () => {
       worker.shutdown();
       await runPromise.catch(() => undefined);
+      await redis.quit();
       await connection.close();
       await prisma.$disconnect();
     },
@@ -79,6 +85,42 @@ export async function startOrderConsumer(
   };
 }
 
+/** Kafka consumer: start a driverDispatchWorkflow per OrderAccepted. Returns a stop handle. */
+export async function startDispatchConsumer(
+  consumer: Consumer,
+  temporal: TemporalHandle,
+  offerTimeoutSeconds: number,
+  maxOffers: number,
+  deliverySeconds: number,
+  registry: SchemaRegistry,
+): Promise<SagaWorkerHandle> {
+  await consumer.connect();
+  await consumer.subscribe({ topic: TOPICS.ORDER_EVENTS, fromBeginning: false });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      const envelope = await readEnvelope(registry, message);
+      if (!envelope) return;
+      if (envelope.eventType !== EVENT_TYPES.ORDER_ACCEPTED) return;
+      const p = envelope.payload as OrderAcceptedPayload;
+      try {
+        await temporal.client.workflow.start(DISPATCH_SAGA.WORKFLOW_TYPE, {
+          taskQueue: DISPATCH_SAGA.TASK_QUEUE,
+          workflowId: `dispatch:${envelope.tenantId}:${p.orderId}`,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, offerTimeoutSeconds, maxOffers, deliverySeconds }],
+        });
+      } catch (err) {
+        if (!/already started|WorkflowExecutionAlreadyStarted/i.test(String(err))) throw err;
+      }
+    },
+  });
+  return {
+    stop: async () => {
+      await consumer.disconnect();
+    },
+  };
+}
+
 async function main(): Promise<void> {
   requireAppDatabaseUrl(); // fail loud if the restricted RLS role isn't configured
   const config = loadConfig();
@@ -89,11 +131,15 @@ async function main(): Promise<void> {
   const registry = createRegistry(config.schemaRegistryUrl);
   const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds, config.paymentConfirmTimeoutSeconds, registry);
 
+  const dispatchConsumer = kafka.consumer({ groupId: CONSUMER_GROUPS.DISPATCH_STARTER });
+  const dispatchHandle = await startDispatchConsumer(dispatchConsumer, temporal, config.dispatchOfferTimeoutSeconds, config.dispatchMaxOffers, config.dispatchDeliveryTimeoutSeconds, registry);
+
   // eslint-disable-next-line no-console
   console.log("saga-worker running");
 
   const shutdown = async (): Promise<void> => {
     await orderConsumer.stop();
+    await dispatchHandle.stop();
     await temporal.connection.close();
     await saga.stop();
     process.exit(0);

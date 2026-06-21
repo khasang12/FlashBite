@@ -10,3 +10,4 @@ export * from "./temporal";
 export * from "./tenant-transaction";
 export * from "./aggregate-store";
 export * from "./order-aggregate";
+export { foldDispatch, offer, acceptOffer, pickup, deliver, fail, INITIAL_DISPATCH_STATE, type DispatchState } from "./dispatch-aggregate";

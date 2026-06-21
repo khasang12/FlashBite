@@ -19,6 +19,9 @@ export interface AppConfig {
   jwtAudience: string;
   jwtAccessTtl: number;
   jwtJwksUrl: string;
+  dispatchOfferTimeoutSeconds: number;
+  dispatchMaxOffers: number;
+  dispatchDeliveryTimeoutSeconds: number;
 }
 
 export const DEFAULT_TENANT_ID = "berlin";
@@ -71,5 +74,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     jwtAudience: env.JWT_AUDIENCE ?? "flashbite",
     jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 3600),
     jwtJwksUrl: env.JWT_JWKS_URL ?? "http://localhost:3003/.well-known/jwks.json",
+    dispatchOfferTimeoutSeconds: Number(env.DISPATCH_OFFER_TIMEOUT_SECONDS ?? 30),
+    dispatchMaxOffers: Number(env.DISPATCH_MAX_OFFERS ?? 5),
+    dispatchDeliveryTimeoutSeconds: Number(env.DISPATCH_DELIVERY_TIMEOUT_SECONDS ?? 900),
   };
 }

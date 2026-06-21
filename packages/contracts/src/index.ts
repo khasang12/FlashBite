@@ -67,6 +67,7 @@ export interface OrderView {
 // ---- Event sourcing ----
 export const AGGREGATE_TYPES = {
   ORDER: "ORDER",
+  DISPATCH: "DISPATCH",
 } as const;
 
 export const EVENT_TYPES = {
@@ -74,6 +75,11 @@ export const EVENT_TYPES = {
   ORDER_ACCEPTED: "OrderAccepted",
   ORDER_CANCELLED: "OrderCancelled",
   DRIVER_TELEMETRY_STREAMED: "DriverTelemetryStreamed",
+  DRIVER_OFFERED: "DriverOffered",
+  DISPATCH_ACCEPTED: "DispatchAccepted",
+  ORDER_PICKED_UP: "OrderPickedUp",
+  ORDER_DELIVERED: "OrderDelivered",
+  DISPATCH_FAILED: "DispatchFailed",
 } as const;
 
 export const ORDER_STATUS = {
@@ -86,6 +92,7 @@ export const ORDER_STATUS = {
 export const TOPICS = {
   ORDER_EVENTS: "order-events",
   TELEMETRY_STREAMS: "telemetry-streams",
+  DISPATCH_EVENTS: "dispatch-events",
 } as const;
 
 /** Kafka consumer group ids — one per consuming service. */
@@ -94,6 +101,8 @@ export const CONSUMER_GROUPS = {
   SAGA: "saga-worker",
   READ_API_SSE: "read-api-sse",
   TELEMETRY: "telemetry-worker",
+  DISPATCH_STARTER: "dispatch-starter",
+  DISPATCH_PROJECTION: "dispatch-projection",
 } as const;
 
 /** Avro record namespace; the record fullname feeds TopicRecordNameStrategy subjects. */
@@ -105,6 +114,11 @@ export const SUBJECTS = [
   { eventType: EVENT_TYPES.ORDER_ACCEPTED, topic: TOPICS.ORDER_EVENTS, recordName: "OrderAccepted", avsc: "order-accepted.avsc" },
   { eventType: EVENT_TYPES.ORDER_CANCELLED, topic: TOPICS.ORDER_EVENTS, recordName: "OrderCancelled", avsc: "order-cancelled.avsc" },
   { eventType: EVENT_TYPES.DRIVER_TELEMETRY_STREAMED, topic: TOPICS.TELEMETRY_STREAMS, recordName: "DriverTelemetry", avsc: "driver-telemetry.avsc" },
+  { eventType: EVENT_TYPES.DRIVER_OFFERED, topic: TOPICS.DISPATCH_EVENTS, recordName: "DriverOffered", avsc: "driver-offered.avsc" },
+  { eventType: EVENT_TYPES.DISPATCH_ACCEPTED, topic: TOPICS.DISPATCH_EVENTS, recordName: "DispatchAccepted", avsc: "dispatch-accepted.avsc" },
+  { eventType: EVENT_TYPES.ORDER_PICKED_UP, topic: TOPICS.DISPATCH_EVENTS, recordName: "OrderPickedUp", avsc: "order-picked-up.avsc" },
+  { eventType: EVENT_TYPES.ORDER_DELIVERED, topic: TOPICS.DISPATCH_EVENTS, recordName: "OrderDelivered", avsc: "order-delivered.avsc" },
+  { eventType: EVENT_TYPES.DISPATCH_FAILED, topic: TOPICS.DISPATCH_EVENTS, recordName: "DispatchFailed", avsc: "dispatch-failed.avsc" },
 ] as const;
 
 /** Subject name = `${topic}-${namespace}.${recordName}` (TopicRecordNameStrategy). */
@@ -116,6 +130,7 @@ export function subjectFor(topic: string, recordName: string): string {
 export const READ_COLLECTIONS = {
   ORDERS: "orders",
   PROCESSED: "processed_events",
+  DISPATCHES: "dispatches",
 } as const;
 
 /** Inbox consumer names (processed_events dedup key segment). */
@@ -147,6 +162,51 @@ export const ORDER_CANCEL_REASONS = {
   PAYMENT_FAILED: "PAYMENT_FAILED",
   PAYMENT_TIMEOUT: "PAYMENT_TIMEOUT",
 } as const;
+
+// ---- Driver dispatch (Phase 3d) ----
+export const DISPATCH_STATUS = {
+  OFFERED: "OFFERED",
+  DISPATCHED: "DISPATCHED",
+  PICKED_UP: "PICKED_UP",
+  DELIVERED: "DELIVERED",
+  FAILED: "FAILED",
+} as const;
+export type DispatchStatus = (typeof DISPATCH_STATUS)[keyof typeof DISPATCH_STATUS];
+
+export const DISPATCH_SAGA = {
+  TASK_QUEUE: ORDER_SAGA.TASK_QUEUE,
+  WORKFLOW_TYPE: "driverDispatchWorkflow",
+  ACCEPT_SIGNAL: "dispatchAccept",
+  REJECT_SIGNAL: "dispatchReject",
+  PICKUP_SIGNAL: "dispatchPickup",
+  DELIVER_SIGNAL: "dispatchDeliver",
+} as const;
+
+export const DISPATCH_FAIL_REASONS = {
+  NO_DRIVERS_AVAILABLE: "NO_DRIVERS_AVAILABLE",
+  DELIVERY_TIMEOUT: "DELIVERY_TIMEOUT",
+} as const;
+
+export interface DriverOfferedPayload { orderId: string; driverId: string }
+export interface DispatchAcceptedPayload { orderId: string; driverId: string }
+export interface OrderPickedUpPayload { orderId: string }
+export interface OrderDeliveredPayload { orderId: string }
+export interface DispatchFailedPayload { orderId: string; reason: string }
+
+export interface DispatchView {
+  tenantId: string;
+  orderId: string;
+  status: DispatchStatus;
+  driverId?: string;
+  offeredDriverId?: string;
+  reason?: string;
+  version: number;
+  updatedAt: string;
+}
+
+export function dispatchAggregateId(orderId: string): string { return `dispatch:${orderId}`; }
+export function driverOnlineKey(tenantId: string): string { return tenantKey(tenantId, "drivers", "online"); }
+export function driverBusyKey(tenantId: string): string { return tenantKey(tenantId, "drivers", "busy"); }
 
 // ---- Auth ----
 export const ROLES = {

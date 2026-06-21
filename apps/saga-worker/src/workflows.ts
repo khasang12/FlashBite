@@ -75,3 +75,5 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
   await recordOrderCancelledActivity(args.tenantId, args.orderId, reason);
   return reason === ORDER_CANCEL_REASONS.SLA_BREACH ? ORDER_SAGA_RESULTS.CANCELLED_SLA : ORDER_SAGA_RESULTS.CANCELLED_DECLINED;
 }
+
+export { driverDispatchWorkflow } from "./dispatch-workflow";

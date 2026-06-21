@@ -1,5 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, UsePipes, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards, UsePipes, ValidationPipe } from "@nestjs/common";
 import { RedisService } from "@flashbite/shared";
+import { Roles, RolesGuard } from "@flashbite/tenant-context";
+import { ROLES, driverOnlineKey } from "@flashbite/contracts";
 import { DriverLocationDto } from "./driver-location.dto";
 import { TelemetryProducerService } from "./telemetry-producer.service";
 import { currentTenant, scopedGeoKey } from "../tenant-scope";
@@ -13,6 +15,7 @@ interface NearbyDriver {
 
 @Controller("drivers")
 @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+@UseGuards(RolesGuard)
 export class DriversController {
   constructor(
     private readonly telemetry: TelemetryProducerService,
@@ -55,5 +58,21 @@ export class DriversController {
       lng: Number(dlng),
       lat: Number(dlat),
     }));
+  }
+
+  @Post(":driverId/online")
+  @HttpCode(202)
+  @Roles(ROLES.DRIVER)
+  async goOnline(@Param("driverId") driverId: string): Promise<{ driverId: string; online: true }> {
+    await this.redis.cluster.sadd(driverOnlineKey(currentTenant()), driverId);
+    return { driverId, online: true };
+  }
+
+  @Post(":driverId/offline")
+  @HttpCode(202)
+  @Roles(ROLES.DRIVER)
+  async goOffline(@Param("driverId") driverId: string): Promise<{ driverId: string; online: false }> {
+    await this.redis.cluster.srem(driverOnlineKey(currentTenant()), driverId);
+    return { driverId, online: false };
   }
 }

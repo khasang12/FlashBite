@@ -5,9 +5,10 @@ import { OrdersModule } from "./orders/orders.module";
 import { SseModule } from "./sse/sse.module";
 import { DriversModule } from "./drivers/drivers.module";
 import { AdminModule } from "./admin/admin.module";
+import { DispatchModule } from "./dispatch/dispatch.module";
 
 @Module({
-  imports: [OrdersModule, SseModule, DriversModule, AdminModule],
+  imports: [OrdersModule, SseModule, DriversModule, AdminModule, DispatchModule],
   controllers: [HealthController],
   providers: [TokenVerifier],
 })
