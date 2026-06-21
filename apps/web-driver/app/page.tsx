@@ -1,17 +1,19 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   AuthGate, useAuthStore,
-  type Tenant,
+  type Tenant, type DispatchView,
   CITY_CENTERS, toNearbyRows,
-  Button,
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  DISPATCH_STATUS,
+  useDispatchStream,
+  acceptDispatch, rejectDispatch, pickupOrder, deliverOrder,
 } from "@flashbite/web-shared";
 import { useNearbyWatch } from "@/hooks/use-nearby-watch";
 import { NearbyMap } from "@/components/nearby-map";
 import { NearbyTable } from "@/components/nearby-table";
-
-const DRIVERS = ["drv-1", "drv-2", "drv-3", "drv-4"];
+import { OnlineToggle } from "@/components/online-toggle";
+import { OfferCard } from "@/components/offer-card";
+import { ActiveJobCard } from "@/components/active-job-card";
 
 const DRIVER_DEMOS = [
   { label: "Berlin drv-1", email: "drv-1@berlin.test" },
@@ -21,16 +23,28 @@ const DRIVER_DEMOS = [
 
 function DriverDashboard() {
   const tenantId = (useAuthStore((s) => s.claims?.tenantId) ?? "berlin") as Tenant;
-  const [driverId, setDriverId] = useState("drv-1");
-  const [watching, setWatching] = useState(false);
+  const driverId = useAuthStore((s) => s.claims?.sub) ?? "";
+  const [online, setOnline] = useState(false);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+
+  const { dispatch } = useDispatchStream(driverId);
+  // An offer the driver hasn't dismissed (rejected/expired) locally.
+  const offer: DispatchView | null =
+    dispatch && dispatch.status === DISPATCH_STATUS.OFFERED && dispatch.offeredDriverId === driverId && dispatch.orderId !== dismissed
+      ? dispatch
+      : null;
+  const job: DispatchView | null =
+    dispatch && (dispatch.status === DISPATCH_STATUS.DISPATCHED || dispatch.status === DISPATCH_STATUS.PICKED_UP) && dispatch.driverId === driverId
+      ? dispatch
+      : null;
 
   const center = CITY_CENTERS[tenantId];
-  const { nearby, reconnecting } = useNearbyWatch(center, watching);
-  // GPS is streamed externally (scripts/stream-gps.sh). The selected driver shows
-  // as "you" when its ping appears in the geo index; everyone else is in the table.
+  const { nearby } = useNearbyWatch(center, online);
   const self = nearby.find((d) => d.driverId === driverId) ?? null;
   const others = toNearbyRows(nearby, driverId);
   const mapCenter = self ? { lng: self.lng, lat: self.lat } : center;
+
+  const onExpire = useCallback(() => { if (offer) setDismissed(offer.orderId); }, [offer]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -38,54 +52,37 @@ function DriverDashboard() {
         <div className="text-lg font-extrabold">
           flashbite <span className="text-muted-foreground font-semibold">driver</span>
         </div>
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Select value={driverId} onValueChange={setDriverId}>
-            <SelectTrigger className="w-28" aria-label="Select driver">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DRIVERS.map((d) => (
-                <SelectItem key={d} value={d}>{d}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-3 text-sm font-semibold">
+          <span className="text-muted-foreground">{driverId}</span>
+          <OnlineToggle driverId={driverId} online={online} onChange={setOnline} />
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-6">
-        <div className="mb-6 flex items-center justify-between rounded-xl border px-5 py-4">
-          {watching ? (
-            <div className="flex items-center gap-3">
-              <span className="relative inline-flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-              </span>
-              <div>
-                <div className="font-bold">Watching — live nearby</div>
-                <div className="text-xs text-muted-foreground">
-                  {tenantId} · {others.length} nearby
-                  {self
-                    ? ` · you (${driverId}): ${self.lng.toFixed(4)}, ${self.lat.toFixed(4)}`
-                    : ` · ${driverId} not streaming yet`}
-                  {reconnecting ? " · reconnecting…" : ""}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              Not watching — start to see nearby drivers (stream GPS via scripts/stream-gps.sh).
-            </div>
-          )}
-          <Button
-            variant={watching ? "secondary" : "default"}
-            onClick={() => setWatching((v) => !v)}
-            aria-pressed={watching}
-          >
-            {watching ? "Stop watching" : "Start watching"}
-          </Button>
-        </div>
+      <main className="mx-auto max-w-5xl px-6 py-6 space-y-6">
+        {offer && (
+          <OfferCard
+            offer={offer}
+            onAccept={() => { void acceptDispatch(offer.orderId, driverId); }}
+            onReject={() => { setDismissed(offer.orderId); void rejectDispatch(offer.orderId, driverId); }}
+            onExpire={onExpire}
+          />
+        )}
+        {job && (
+          <ActiveJobCard
+            job={job}
+            onPickup={() => { void pickupOrder(job.orderId, driverId); }}
+            onDeliver={() => { void deliverOrder(job.orderId, driverId); }}
+          />
+        )}
+        {!offer && !job && (
+          <div className="rounded-xl border px-5 py-4 text-sm text-muted-foreground">
+            {online
+              ? "Online — waiting for an offer."
+              : "You're offline. Go online to receive delivery offers."}
+          </div>
+        )}
 
-        {watching && (
+        {online && (
           <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
