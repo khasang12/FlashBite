@@ -35,7 +35,11 @@ test("place an order and see it reach PLACED, then ACCEPTED after merchant accep
   const orderId = page.url().split("/orders/")[1];
   await expect(page.getByText("PLACED")).toBeVisible({ timeout: 30_000 });
 
-  // Merchant accept via write-api signals the saga workflow -> ACCEPTED
+  // Customer confirms payment (3c-iii gate) -> saga authorizes -> payment shows Authorized
+  await page.getByRole("button", { name: /Confirm payment/i }).click();
+  await expect(page.getByText("Authorized")).toBeVisible({ timeout: 30_000 });
+
+  // Merchant accept via write-api signals the saga workflow -> ACCEPTED (payment now authorized)
   const merchantToken = await apiToken(request, "merchant@berlin.test");
   const res = await request.post(`${WRITE_API}/orders/${orderId}/accept`, {
     headers: { Authorization: `Bearer ${merchantToken}` },
