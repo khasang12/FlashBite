@@ -1,10 +1,11 @@
 # FlashBite — Architecture (what's built so far)
 
 This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2 +
-Phase 3a + Phase 3b + Phase 3c: the walking-skeleton order plane, the telemetry plane, all four frontends, the
+Phase 3a + Phase 3b + Phase 3c + Phase 3d: the walking-skeleton order plane, the telemetry plane, all four frontends, the
 verified-JWT identity + Postgres-RLS isolation layer, the event-sourced Order aggregate with
-optimistic concurrency, Confluent-Avro on the Kafka event bus with an enforced Schema Registry, and
-a self-built `payments` service with authorize/capture/void and deterministic decline).
+optimistic concurrency, Confluent-Avro on the Kafka event bus with an enforced Schema Registry,
+a self-built `payments` service with authorize/capture/void and deterministic decline, and
+event-sourced driver dispatch with a driver job UI — online presence + live offers over SSE).
 It is deliberately scoped to working code — a "Not yet built" section at the end lists what the
 master spec still defers to later phases.
 
@@ -99,8 +100,8 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 | Component | Type | Port | Responsibility |
 |---|---|---|---|
 | `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
-| `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal. `@Roles` gates: `customer` places, `merchant` accepts/declines. |
-| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
+| `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal; relay driver dispatch commands (`POST /dispatch/:orderId/{accept,reject,pickup,deliver}`) as signals to the dispatch child workflow. `@Roles` gates: `customer` places, `merchant` accepts/declines, `driver` acts on dispatch. |
+| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
@@ -108,7 +109,7 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 | `telemetry-worker` | TS worker | — | Consumes `telemetry-streams`, `GEOADD`s drivers into the per-tenant Redis geo key. |
 | `web-customer` | Next.js | 3100 | Storefront: menu, cart, checkout, live order tracking. |
 | `web-merchant` | Next.js | 3101 | Order queue (live SSE), accept/decline. |
-| `web-driver` | Next.js | 3102 | Go online, view nearby drivers on a Mapbox map (GPS streamed by a script). |
+| `web-driver` | Next.js | 3102 | Driver job UI: go online/offline, receive live dispatch offers over SSE, accept/reject → pickup → deliver; plus the nearby-drivers Mapbox map (GPS streamed by a script). `driverId` = JWT `sub`. |
 | `web-admin` | Next.js | 3103 | Operator console (logs in as `operator@flashbite.test`): cross-tenant GMV/analytics charts, per-tenant driver maps, combined orders — served by the `/admin/*` endpoints. |
 
 **Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
@@ -473,8 +474,10 @@ switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/ex
   until terminal status.
 - **web-merchant** (`merchant@<tenant>.test`) — a live order table (snapshot + SSE) with
   accept/decline and a detail sheet.
-- **web-driver** (`driver@<tenant>.test`) — view nearby drivers around the token's city center,
-  rendered on a Mapbox map + table (read-only viewer; GPS comes from the script).
+- **web-driver** (`drv-1..drv-4@<tenant>.test`) — driver job UI: an online/offline toggle, a live
+  dispatch **offer card** (with countdown) and **active-job card** (pickup → deliver) driven by the
+  per-driver `GET /driver/dispatch/stream` SSE; below it, nearby drivers around the token's city
+  center on a Mapbox map + table (GPS comes from the script). `driverId` is the JWT `sub`.
 - **web-admin** (`operator@flashbite.test`) — operator console: GMV/orders/cancelled/active-driver
   cards, four recharts charts (GMV-by-tenant, status breakdown, top SKUs, GMV-over-time), two
   per-tenant Mapbox maps, and a combined orders table with cancellation reasons. Live via one merged
@@ -507,8 +510,6 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 - **Aggregate snapshots + generic command bus** — the aggregate replays full event history on every
   load; snapshotting and a reusable command-dispatch abstraction are backlogged (see
   `docs/superpowers/backlog.md`).
-- **Driver dispatch** — closing the order↔driver loop (saga assigns a nearby driver; driver
-  accept/pickup/deliver).
 - **Real Stripe integration** — the `payments` service implements authorize/capture/void against its own DB; refund, webhook settlement, payment read model, and real Stripe/payment-provider wiring remain backlog.
 - **Identity hardening** — refresh tokens, key persistence/rotation across restarts, user
   management/signup, revocation. Phase 2 ships the core (RS256 login + JWKS + seeded users,
@@ -539,3 +540,14 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 > (`AUTH_DECLINE_THRESHOLD`) produces `PAYMENT_FAILED` → `OrderCancelled`. Payment operations are
 > idempotent per `(tenantId, orderId)`. Refund / webhook settlement / payment read model / real
 > Stripe remain backlog.
+>
+> **Completed in Phase 3d:** event-sourced **driver dispatch** closing the order↔driver loop. **3d-i**
+> added a second `DriverDispatch` aggregate (own `dispatch-events` topic + `dispatches` read model) and
+> `driverDispatchWorkflow` — run as a **child** of the order workflow (`executeChild`) — that offers the
+> job to the nearest **online + geolocated** driver, re-offering the next-nearest on reject/timeout,
+> then accept → `DISPATCHED` → pickup/deliver signals → `PICKED_UP`/`DELIVERED` (exhaustion or
+> post-accept inactivity → `DispatchFailed`). **3d-ii** added the driver job UI: `driverId` from the JWT
+> `sub` (drivers seeded `drv-1..drv-4`), online/offline toggle, and a per-driver-filtered
+> `GET /driver/dispatch/stream` SSE feeding an offer card (countdown) + active-job card. Backlog:
+> client-supplied `driverId` should be server-derived from `sub`; order aggregate left `ACCEPTED` on
+> dispatch failure (requeue/refund); customer live driver-location tracking (**3d-iii**).

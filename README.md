@@ -63,7 +63,7 @@ flowchart LR
 > **Full architecture (components, sequence diagrams, data model):**
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**Built (Phase 0 + 1 + 2 + 3a):**
+**Built (Phase 0 + 1 + 2 + 3a/3b/3c/3d):**
 
 - **CQRS + Event Sourcing + Transactional Outbox** — order events + outbox row committed in one
   Postgres transaction (Prisma); forward-only, rebuildable Mongo projections.
@@ -77,6 +77,13 @@ flowchart LR
   register:schemas` (BACKWARD compatibility enforced; producers are lookup-only, never auto-
   register). Per-order partition keys (`tenantId:orderId`) preserve ordering.
 - **Temporal sagas + payments service (Phase 3c)** — one workflow per order: **authorize** payment (via the `payments` service :3004) → per-tenant SLA timer raced against the merchant-approval signal → **capture** (accept) or **void** (decline / SLA breach). A deterministic decline rule (`AUTH_DECLINE_THRESHOLD`, default 100 000) produces `PAYMENT_FAILED` → `OrderCancelled`. The payments service owns its own `flashbite_payments` database (Postgres, separate bounded context).
+- **Driver dispatch + job UI (Phase 3d)** — after an order is accepted, the saga `executeChild`s a
+  `driverDispatchWorkflow` that offers the job to the nearest **online + geolocated** driver, re-offering
+  the next-nearest on reject/timeout; a second event-sourced `DriverDispatch` aggregate (own
+  `dispatch-events` topic + read model) keeps the bounded context separate at the data layer. The driver
+  app goes online/offline and receives offers over a **per-driver-filtered SSE stream**
+  (`GET /driver/dispatch/stream`), accepting → pickup → deliver; `driverId` is the JWT `sub` (drivers
+  seeded `drv-1..drv-4`, so identity == dispatch id).
 - **Polyglot persistence** — Postgres (event store), Mongo (read models + inbox), Redis Cluster
   (cache + geo, `tenant:{id}` hash-tag co-location).
 - **Real-time telemetry** — ephemeral driver GPS (`DriverTelemetryStreamed` on `telemetry-streams`)
@@ -102,7 +109,7 @@ flowchart LR
 - **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
   tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
 
-**Planned (later phases):** **driver dispatch** (closing the order↔driver loop), real Stripe integration (refund / webhook settlement / payment read model). Identity hardening (refresh tokens, key rotation) is backlogged. See `docs/superpowers/backlog.md`.
+**Planned (later phases):** customer live driver-location tracking (3d-iii), real Stripe integration (refund / webhook settlement / payment read model). Identity hardening (refresh tokens, key rotation) and server-deriving the dispatch `driverId` from the JWT `sub` are backlogged. See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -146,7 +153,8 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **3a** | Event-sourced Order aggregate (full ES, optimistic concurrency) | ✅ complete |
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
 | **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
-| 3 (remaining) | Driver dispatch, real Stripe (refund/webhook/read-model) | planned |
+| **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) | ✅ complete |
+| 3 (remaining) | Customer live driver-location tracking (3d-iii), real Stripe (refund/webhook/read-model) | planned |
 | 4 | Frontend polish + observability story | planned |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
@@ -225,13 +233,14 @@ pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
 pnpm dev:identity      # :3003  JWT identity service — MUST be running for login
 pnpm dev:web-customer  # :3100  storefront + order tracking
 pnpm dev:web-merchant  # :3101  live order queue, accept/decline
-pnpm dev:web-driver    # :3102  nearby-drivers map (needs NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
+pnpm dev:web-driver    # :3102  driver job UI (online toggle + live dispatch offers) + nearby map (NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
 pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 ```
 
 > **Login required (Phase 2 S4):** after `pnpm seed:users`, every UI requires a logged-in user.
 > Use seeded credentials (`role@tenant.test` / `devpassword`), e.g. `customer@berlin.test`,
-> `merchant@berlin.test`, `driver@berlin.test`; the admin dashboard uses `operator@flashbite.test`.
+> `merchant@berlin.test`; drivers are seeded `drv-1@berlin.test … drv-4@berlin.test` (the JWT `sub`
+> is the dispatch `driverId`); the admin dashboard uses `operator@flashbite.test`.
 > `pnpm dev:identity` must be running — each frontend reaches it same-origin via the
 > `/api/identity/*` Next.js rewrite.
 
@@ -273,11 +282,11 @@ pnpm seed:users        # role@tenant.test / devpassword
 
 # stream simulated GPS pings (random walk) until Ctrl+C — logs in for a driver JWT first
 ./scripts/stream-gps.sh
-# tune: DRIVER=drv-7 TENANT=tokyo INTERVAL=0.5 ./scripts/stream-gps.sh
+# tune: DRIVER=drv-2 TENANT=tokyo INTERVAL=0.5 ./scripts/stream-gps.sh   # drivers seeded drv-1..drv-4
 
 # …or by hand (tenant comes from the token, not a header):
 TOKEN=$(curl -s -XPOST localhost:3003/auth/login -H 'Content-Type: application/json' \
-  -d '{"email":"driver@berlin.test","password":"devpassword"}' \
+  -d '{"email":"drv-1@berlin.test","password":"devpassword"}' \
   | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
 curl -XPOST localhost:3002/drivers/drv-1/location \
   -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
