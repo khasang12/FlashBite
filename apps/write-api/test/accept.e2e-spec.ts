@@ -17,6 +17,7 @@ describe("write-api merchant accept (e2e)", () => {
   let temporal: TemporalHandle;
   let auth: TestAuth;
   let merchant: string;
+  let customer: string;
   const prisma = new PrismaClient();
 
   beforeAll(async () => {
@@ -31,6 +32,7 @@ describe("write-api merchant accept (e2e)", () => {
     app = mod.createNestApplication();
     await app.init();
     merchant = await auth.mint({ tenantId: "berlin", role: "merchant", sub: "m-1" });
+    customer = await auth.mint({ tenantId: "berlin", role: "customer", sub: "c-1" });
   }, 60000);
 
   afterAll(async () => {
@@ -40,19 +42,41 @@ describe("write-api merchant accept (e2e)", () => {
     await prisma.$disconnect();
   });
 
-  it("POST /orders/:id/accept signals the workflow -> ACCEPTED + OrderAccepted event", async () => {
+  it("accept is rejected (409) before the payment is authorized", async () => {
+    const orderId = randomUUID();
+    await appendWithExpectedVersion(prisma, { tenantId: "berlin", aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId, expectedVersion: 0, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId, customerId: "c-1", items: [], totalAmount: 1200 } });
+    await temporal.client.workflow.start("orderLifecycleWorkflow", {
+      taskQueue: "order-lifecycle",
+      workflowId: `berlin:${orderId}`,
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
+    });
+    const res = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/accept`)
+      .set("Authorization", `Bearer ${merchant}`);
+    expect(res.status).toBe(409);
+
+    await temporal.client.workflow.getHandle(`berlin:${orderId}`).terminate().catch(() => undefined);
+    await prisma.outbox.deleteMany({ where: { partitionKey: `berlin:${orderId}` } });
+    await prisma.eventStore.deleteMany({ where: { aggregateId: orderId } });
+  }, 60000);
+
+  it("POST /orders/:id/accept after confirm+authorize -> ACCEPTED + OrderAccepted event", async () => {
     const orderId = randomUUID();
     await appendWithExpectedVersion(prisma, { tenantId: "berlin", aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId, expectedVersion: 0, eventType: EVENT_TYPES.ORDER_PLACED, payload: { orderId, customerId: "c-1", items: [], totalAmount: 1200 } });
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
     });
 
-    const res = await request(app.getHttpServer())
-      .post(`/orders/${orderId}/accept`)
-      .set("Authorization", `Bearer ${merchant}`);
-    expect(res.status).toBe(202);
+    await request(app.getHttpServer()).post(`/orders/${orderId}/confirm-payment`).set("Authorization", `Bearer ${customer}`).expect(202);
+    let acceptStatus = 0;
+    for (let i = 0; i < 30 && acceptStatus !== 202; i++) {
+      const r = await request(app.getHttpServer()).post(`/orders/${orderId}/accept`).set("Authorization", `Bearer ${merchant}`);
+      acceptStatus = r.status;
+      if (acceptStatus !== 202) await new Promise((res) => setTimeout(res, 500));
+    }
+    expect(acceptStatus).toBe(202);
 
     const result = await handle.result();
     expect(result).toBe("ACCEPTED");
