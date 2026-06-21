@@ -1,6 +1,7 @@
-import { proxyActivities, condition, defineSignal, setHandler } from "@temporalio/workflow";
-import { ORDER_SAGA, ORDER_SAGA_RESULTS, ORDER_CANCEL_REASONS } from "@flashbite/contracts";
+import { proxyActivities, condition, defineSignal, setHandler, executeChild } from "@temporalio/workflow";
+import { ORDER_SAGA, ORDER_SAGA_RESULTS, ORDER_CANCEL_REASONS, DISPATCH_STATUS } from "@flashbite/contracts";
 import type { Activities } from "./activities";
+import { driverDispatchWorkflow } from "./dispatch-workflow";
 
 export const merchantApprovalSignal = defineSignal<[boolean]>(ORDER_SAGA.MERCHANT_APPROVAL_SIGNAL);
 export const confirmPaymentSignal = defineSignal(ORDER_SAGA.CONFIRM_PAYMENT_SIGNAL);
@@ -20,6 +21,10 @@ export interface OrderLifecycleArgs {
   totalAmount: number;
   slaSeconds: number;
   confirmSeconds: number;
+  // Dispatch knobs threaded into the child driverDispatchWorkflow on acceptance.
+  offerTimeoutSeconds: number;
+  maxOffers: number;
+  deliverySeconds: number;
 }
 
 /**
@@ -67,7 +72,20 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
       return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
     }
     await recordOrderAcceptedActivity(args.tenantId, args.orderId);
-    return ORDER_SAGA_RESULTS.ACCEPTED;
+    // Orchestrate the fulfillment leg as a child workflow — one workflow tree per order.
+    const dispatchOutcome = await executeChild(driverDispatchWorkflow, {
+      workflowId: `dispatch:${args.tenantId}:${args.orderId}`,
+      args: [{
+        tenantId: args.tenantId,
+        orderId: args.orderId,
+        offerTimeoutSeconds: args.offerTimeoutSeconds,
+        maxOffers: args.maxOffers,
+        deliverySeconds: args.deliverySeconds,
+      }],
+    });
+    return dispatchOutcome === DISPATCH_STATUS.DELIVERED
+      ? ORDER_SAGA_RESULTS.DELIVERED
+      : ORDER_SAGA_RESULTS.DISPATCH_FAILED;
   }
 
   await voidPaymentActivity(args.tenantId, args.orderId);
@@ -76,4 +94,4 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
   return reason === ORDER_CANCEL_REASONS.SLA_BREACH ? ORDER_SAGA_RESULTS.CANCELLED_SLA : ORDER_SAGA_RESULTS.CANCELLED_DECLINED;
 }
 
-export { driverDispatchWorkflow } from "./dispatch-workflow";
+export { driverDispatchWorkflow };

@@ -16,7 +16,7 @@ const {
   recordOrderPickedUpActivity,
   recordOrderDeliveredActivity,
   recordDispatchFailedActivity,
-} = proxyActivities<DispatchActivities>({ startToCloseTimeout: "1 minute" });
+} = proxyActivities<DispatchActivities>({ startToCloseTimeout: "1 minute", retry: { maximumAttempts: 5 } });
 
 export interface DispatchArgs {
   tenantId: string;
