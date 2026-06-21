@@ -69,6 +69,7 @@ export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";
 export { dispatchStatusLabel, DISPATCH_OFFER_TIMEOUT_SECONDS } from "./dispatch/labels";
+export { useDispatchStream, parseDispatchData, reduceDispatch } from "./dispatch/use-dispatch-stream";
 export { useOrderStream, parseStreamData } from "./orders/use-order-stream";
 export {
   Table,
