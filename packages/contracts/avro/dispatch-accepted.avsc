@@ -1,0 +1,1 @@
+{ "type": "record", "name": "DispatchAccepted", "namespace": "com.flashbite.events", "fields": [ { "name": "orderId", "type": "string" }, { "name": "driverId", "type": "string" } ] }

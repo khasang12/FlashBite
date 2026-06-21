@@ -14,6 +14,6 @@ describe("avro subjects", () => {
     expect(byType[EVENT_TYPES.ORDER_ACCEPTED].topic).toBe(TOPICS.ORDER_EVENTS);
     expect(byType[EVENT_TYPES.ORDER_CANCELLED].topic).toBe(TOPICS.ORDER_EVENTS);
     expect(byType[EVENT_TYPES.DRIVER_TELEMETRY_STREAMED].topic).toBe(TOPICS.TELEMETRY_STREAMS);
-    expect(SUBJECTS).toHaveLength(4);
+    expect(SUBJECTS).toHaveLength(9);
   });
 });
