@@ -27,6 +27,14 @@ export interface OrderLifecycleArgs {
   deliverySeconds: number;
 }
 
+/** Map a driverDispatchWorkflow outcome to the order saga's terminal result. Delivered fulfils the
+ *  order; any other terminal dispatch state (FAILED, or a crashed child) leaves it DISPATCH_FAILED. */
+export function dispatchResult(dispatchOutcome: string): string {
+  return dispatchOutcome === DISPATCH_STATUS.DELIVERED
+    ? ORDER_SAGA_RESULTS.DELIVERED
+    : ORDER_SAGA_RESULTS.DISPATCH_FAILED;
+}
+
 /**
  * Wait for the customer to confirm payment -> authorize a hold -> race the SLA timer against
  * the merchant-approval signal. No confirm in time -> OrderCancelled(PAYMENT_TIMEOUT), no authorize.
@@ -72,20 +80,26 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
       return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
     }
     await recordOrderAcceptedActivity(args.tenantId, args.orderId);
-    // Orchestrate the fulfillment leg as a child workflow — one workflow tree per order.
-    const dispatchOutcome = await executeChild(driverDispatchWorkflow, {
-      workflowId: `dispatch:${args.tenantId}:${args.orderId}`,
-      args: [{
-        tenantId: args.tenantId,
-        orderId: args.orderId,
-        offerTimeoutSeconds: args.offerTimeoutSeconds,
-        maxOffers: args.maxOffers,
-        deliverySeconds: args.deliverySeconds,
-      }],
-    });
-    return dispatchOutcome === DISPATCH_STATUS.DELIVERED
-      ? ORDER_SAGA_RESULTS.DELIVERED
-      : ORDER_SAGA_RESULTS.DISPATCH_FAILED;
+    // Orchestrate the fulfillment leg as a child workflow — one workflow tree per order. A child
+    // that *returns* FAILED and one that *throws* (e.g. an activity exhausts its retries) both mean
+    // the same thing to the order: dispatch did not deliver. The order stays ACCEPTED either way
+    // (requeue/refund on dispatch failure is backlog), so map both to DISPATCH_FAILED.
+    let dispatchOutcome: string;
+    try {
+      dispatchOutcome = await executeChild(driverDispatchWorkflow, {
+        workflowId: `dispatch:${args.tenantId}:${args.orderId}`,
+        args: [{
+          tenantId: args.tenantId,
+          orderId: args.orderId,
+          offerTimeoutSeconds: args.offerTimeoutSeconds,
+          maxOffers: args.maxOffers,
+          deliverySeconds: args.deliverySeconds,
+        }],
+      });
+    } catch {
+      return ORDER_SAGA_RESULTS.DISPATCH_FAILED;
+    }
+    return dispatchResult(dispatchOutcome);
   }
 
   await voidPaymentActivity(args.tenantId, args.orderId);

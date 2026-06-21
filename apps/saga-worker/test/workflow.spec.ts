@@ -2,7 +2,17 @@ import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import { ApplicationFailure } from "@temporalio/activity";
 import path from "node:path";
-import { orderLifecycleWorkflow, merchantApprovalSignal, confirmPaymentSignal } from "../src/workflows";
+import { orderLifecycleWorkflow, merchantApprovalSignal, confirmPaymentSignal, dispatchResult } from "../src/workflows";
+import { DISPATCH_STATUS } from "@flashbite/contracts";
+
+describe("dispatchResult (order maps the dispatch child outcome)", () => {
+  it("DELIVERED -> DELIVERED", () => {
+    expect(dispatchResult(DISPATCH_STATUS.DELIVERED)).toBe("DELIVERED");
+  });
+  it("FAILED -> DISPATCH_FAILED", () => {
+    expect(dispatchResult(DISPATCH_STATUS.FAILED)).toBe("DISPATCH_FAILED");
+  });
+});
 
 describe("orderLifecycleWorkflow", () => {
   let env: TestWorkflowEnvironment;
