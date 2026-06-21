@@ -17,11 +17,17 @@ This is a real behavior change to the happy path, not an additive read-only feat
 
 1. **Gate authorization** (not capture, not a standalone "pay now"). The saga waits for a customer
    confirm signal before running `authorizePaymentActivity`.
-2. **No new order status; merchant side unchanged.** The order is `PLACED` from the start as today.
-   The merchant's accept/decline is a Temporal signal that buffers until the flow reaches the race —
-   a merchant may "accept" before the customer has confirmed; it simply has no effect until
-   confirm → authorize succeeds. (We explicitly chose simplicity over a dedicated `AWAITING_PAYMENT`
-   status.)
+2. **No new order status, but the merchant is read-only until payment is authorized.** The order is
+   `PLACED` from the start (no `AWAITING_PAYMENT` status). The merchant can always *see* the order,
+   but **cannot accept/decline until the order's payment is `AUTHORIZED`** (i.e. the customer has
+   confirmed and authorization succeeded). Enforced in two places:
+   - **Authoritative:** the write-api accept/decline endpoint rejects with `409 Conflict` when the
+     order has no authorized payment yet.
+   - **UX:** the merchant detail sheet disables the Accept/Decline buttons and shows "Awaiting
+     customer payment" until the payment is authorized (it reads payment status from the 3c-ii
+     `GET /orders/:id/payment` endpoint).
+   This avoids a dedicated order status while still preventing a merchant from acting on an unpaid
+   order. (Payment status drives the gate, not the order read model.)
 3. **Separate confirm window + new cancel reason.** A dedicated `PAYMENT_CONFIRM_TIMEOUT_SECONDS`
    (default 120). No confirm in time → `OrderCancelled(PAYMENT_TIMEOUT)` (label "Payment not
    confirmed"). After a successful confirm, the existing `SAGA_SLA_SECONDS` merchant timer starts
@@ -88,6 +94,13 @@ in activities; the only new bundle import is the `ORDER_SAGA` / contracts consta
   `handle.signal(ORDER_SAGA.CONFIRM_PAYMENT_SIGNAL)` on workflow `${tenantId}:${orderId}`, mapping a
   "not found" to `404` (same pattern as accept/decline — covers the brief OrderPlaced→saga-start
   race; the UI retries). Tenant from the JWT. Returns `{ orderId, signalled: "confirm-payment" }`.
+- **Accept/decline payment gate (authoritative).** Before signaling `MERCHANT_APPROVAL_SIGNAL`, the
+  accept/decline handlers verify the order's payment is `AUTHORIZED`; if not, throw
+  `409 Conflict` ("Order payment not confirmed"). This requires a small payments status lookup in
+  write-api: a thin `PaymentsClient.getStatus(tenantId, orderId)` (HTTP `GET {paymentsUrl}/payments/
+  {tenant}/{order}`, 404 → null) reading `loadConfig().paymentsUrl` — mirrors read-api's 3c-ii
+  `PaymentsClient`. (A `CAPTURED`/`VOIDED`/`DECLINED`/absent payment is not `AUTHORIZED`, so the gate
+  also blocks acting on an already-terminal order — consistent with today's workflow guards.)
 
 ### web-shared
 - `confirmPayment(orderId): Promise<void>` in `api/client.ts` — `POST /api/write/orders/:id/confirm-payment`
@@ -108,6 +121,14 @@ in activities; the only new bundle import is the `ORDER_SAGA` / contracts consta
 - Errors (e.g. 404 before the workflow exists, or a network failure) show a small inline message and
   re-enable the button so the customer can retry.
 
+### web-merchant — read-only until paid
+- The order detail sheet (`apps/web-merchant/components/order-detail-sheet.tsx`) fetches the order's
+  payment status (via `fetchOrderPayment` from web-shared, the 3c-ii client) when opened. While the
+  payment is not `AUTHORIZED`, the **Accept/Decline buttons are hidden/disabled** and the sheet shows
+  "Awaiting customer payment". Once `AUTHORIZED`, the buttons enable as today. The orders table stays
+  read-only regardless (it already only displays rows). If a stale UI does fire accept/decline, the
+  write-api `409` is the backstop and the sheet surfaces the error.
+
 ## Required updates to existing behavior/tests (the ripple)
 
 - **3c saga e2e** (`apps/saga-worker/test/*` — accept / decline-SLA / payment-failed) assume immediate
@@ -116,7 +137,11 @@ in activities; the only new bundle import is the `ORDER_SAGA` / contracts consta
   **no-confirm → `PAYMENT_TIMEOUT` cancel, no payment row created**.
 - **Playwright e2e** that place an order and expect it to progress (web-customer tracking,
   web-merchant accept/decline flows) must insert a **confirm-payment** step after placing, else the
-  order auto-cancels. Update those flows.
+  order auto-cancels — and the merchant accept now only works *after* that confirm (the buttons are
+  disabled and the endpoint 409s before payment is authorized). Update those flows.
+- **write-api accept e2e** (`apps/write-api/test/accept.e2e-spec.ts`): existing accept/decline cases
+  now need an authorized payment first (or assert the new `409` when none exists). Add a case:
+  accept with no authorized payment → `409`.
 - **contracts spec** (`contracts.spec.ts`): extend assertions for the new constants (no weakening).
 - Docs: `docs/ARCHITECTURE.md` §3 saga description + the lifecycle diagram gain the confirm gate;
   `apps/write-api/requests.http` gains a confirm-payment request.
@@ -128,7 +153,8 @@ in activities; the only new bundle import is the `ORDER_SAGA` / contracts consta
   **no-confirm→`OrderCancelled(PAYMENT_TIMEOUT)` with no payment row**. Use a short
   `confirmSeconds`/`slaSeconds` via `TestWorkflowEnvironment.createTimeSkipping`.
 - **write-api e2e:** `POST /orders/:id/confirm-payment` signals the workflow (200/202), is role-gated
-  to customer (403 for others), tenant-scoped, and 404s when no workflow exists.
+  to customer (403 for others), tenant-scoped, and 404s when no workflow exists. **Accept/decline gate:**
+  accept/decline with no authorized payment → `409`; with an authorized payment → `202` as before.
 - **web-shared vitest:** `confirmPayment` request shape.
 - **web-customer:** light render/logic test that the confirm button appears only when `PLACED` +
   payment `null` and calls `confirmPayment`; Playwright flow updated.
@@ -148,6 +174,8 @@ in activities; the only new bundle import is the `ORDER_SAGA` / contracts consta
    proceeds unchanged; the tracking page reflects Authorized → Paid (or Payment failed).
 3. An order never confirmed within `PAYMENT_CONFIRM_TIMEOUT_SECONDS` auto-cancels with
    `PAYMENT_TIMEOUT` → "Payment not confirmed", and **no payment row** is created.
-4. The confirm endpoint is customer-role-gated and tenant-scoped; the merchant flow is unchanged.
+4. The confirm endpoint is customer-role-gated and tenant-scoped. The merchant can view an order at
+   any time but can only accept/decline once its payment is `AUTHORIZED` — enforced in the UI
+   (buttons disabled + "Awaiting customer payment") and authoritatively by write-api (`409` otherwise).
 5. All suites green — updated 3c saga e2e + new confirm/timeout cases, write-api confirm e2e,
    web-shared vitest, updated Playwright flows; existing order/telemetry/Avro suites unaffected.
