@@ -22,6 +22,16 @@ export function upsertOrder(rows: OrderView[], order: OrderView): OrderView[] {
   return [order, ...without].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
+const CANCEL_REASON_LABELS: Record<string, string> = {
+  SLA_BREACH: "SLA breach",
+  DECLINED: "Declined by merchant",
+  PAYMENT_FAILED: "Payment failed",
+};
+
+export function cancelReasonLabel(reason: string | undefined): string {
+  return reason ? (CANCEL_REASON_LABELS[reason] ?? reason) : "";
+}
+
 /** Apply a live SSE event to existing rows: update a known order's status in place.
  *  Unknown orders are left unchanged — the caller fetches their detail and upserts. */
 export function applyOrderEvent(rows: OrderView[], event: OrderStreamEvent): OrderView[] {

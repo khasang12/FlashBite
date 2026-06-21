@@ -48,8 +48,13 @@ describe("contracts constants", () => {
       ACCEPTED: "ACCEPTED",
       CANCELLED_SLA: "CANCELLED_SLA",
       CANCELLED_DECLINED: "CANCELLED_DECLINED",
+      CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
     });
-    expect(ORDER_CANCEL_REASONS).toEqual({ SLA_BREACH: "SLA_BREACH", DECLINED: "DECLINED" });
+    expect(ORDER_CANCEL_REASONS).toEqual({
+      SLA_BREACH: "SLA_BREACH",
+      DECLINED: "DECLINED",
+      PAYMENT_FAILED: "PAYMENT_FAILED",
+    });
   });
 
   it("exposes telemetry constants + geo key helper", () => {

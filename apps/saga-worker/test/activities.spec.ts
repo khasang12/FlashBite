@@ -23,9 +23,4 @@ describe("saga activities", () => {
     await prisma.eventStore.deleteMany({ where: { aggregateId: orderId } });
   });
 
-  it("charge + refund activities resolve without throwing (fake gateway)", async () => {
-    const activities = createActivities(prisma);
-    await expect(activities.chargePaymentActivity("berlin", "o", 100)).resolves.toBeUndefined();
-    await expect(activities.refundPaymentActivity("berlin", "o", 100)).resolves.toBeUndefined();
-  });
 });

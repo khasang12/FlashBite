@@ -135,12 +135,14 @@ export const ORDER_SAGA_RESULTS = {
   ACCEPTED: "ACCEPTED",
   CANCELLED_SLA: "CANCELLED_SLA",
   CANCELLED_DECLINED: "CANCELLED_DECLINED",
+  CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
 } as const;
 
 /** Reason recorded on an OrderCancelled event. */
 export const ORDER_CANCEL_REASONS = {
   SLA_BREACH: "SLA_BREACH",
   DECLINED: "DECLINED",
+  PAYMENT_FAILED: "PAYMENT_FAILED",
 } as const;
 
 // ---- Auth ----
@@ -172,4 +174,32 @@ export interface NearbyDriver {
   distanceKm: number;
   lng: number;
   lat: number;
+}
+
+// ---- Payments (Phase 3c) ----
+export const PAYMENT_STATUS = {
+  AUTHORIZED: "AUTHORIZED",
+  CAPTURED: "CAPTURED",
+  VOIDED: "VOIDED",
+  DECLINED: "DECLINED",
+} as const;
+export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
+
+/** Request bodies the saga sends to the payments service. */
+export interface AuthorizePaymentRequest {
+  tenantId: string;
+  orderId: string;
+  amount: number;
+  idempotencyKey: string;
+}
+export interface CaptureVoidRequest {
+  tenantId: string;
+  orderId: string;
+  idempotencyKey: string;
+}
+
+/** Response from authorize/capture/void. `outcome` is the lowercase result word. */
+export interface PaymentResponse {
+  paymentId: string;
+  outcome: "authorized" | "declined" | "captured" | "voided";
 }

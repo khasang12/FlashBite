@@ -10,3 +10,4 @@ pnpm-debug.log*
 .superpowers/
 playwright-report/
 test-results/
+apps/payments/prisma/generated/

@@ -14,6 +14,9 @@ jobs:
       MONGO_URI: mongodb://localhost:27017/flashbite_read
       REDIS_CLUSTER_NODES: 127.0.0.1:7100,127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103,127.0.0.1:7104,127.0.0.1:7105
       TEMPORAL_ADDRESS: localhost:7233
+      PAYMENTS_URL: http://localhost:3004
+      PAYMENTS_DATABASE_URL: postgresql://flashbite:local_dev_only_change_me@localhost:5434/flashbite_payments
+      AUTH_DECLINE_THRESHOLD: "100000"
     steps:
       - uses: actions/checkout@v4
 
@@ -53,8 +56,17 @@ jobs:
           pnpm --filter @flashbite/shared exec prisma generate --schema prisma/schema.prisma
           pnpm --filter @flashbite/shared exec prisma migrate deploy --schema prisma/schema.prisma
 
+      - name: Payments DB (generate + migrate)
+        run: |
+          pnpm payments:generate
+          node packages/shared/node_modules/prisma/build/index.js migrate deploy --schema apps/payments/prisma/schema.prisma
+
       - name: Run tests
-        run: pnpm test
+        run: |
+          node -r @swc-node/register -r tsconfig-paths/register apps/payments/src/main.ts & echo $! > /tmp/payments.pid
+          node -e "const t=Date.now()+30000;(async function p(){try{const r=await fetch('http://localhost:3004/health');if(r.ok)return console.log('payments ready');}catch{}if(Date.now()>t){console.error('payments not ready');process.exit(1);}setTimeout(p,1000);})();"
+          pnpm test
+          kill $(cat /tmp/payments.pid) 2>/dev/null || true
 
       - name: Tear down infra
         if: always()

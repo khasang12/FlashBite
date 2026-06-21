@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PAYMENTS_DATABASE_URL")
+}
+
+model Payment {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id")
+  orderId      String    @map("order_id")
+  amount       Int
+  status       String // AUTHORIZED | CAPTURED | VOIDED | DECLINED
+  authorizedAt DateTime? @map("authorized_at")
+  capturedAt   DateTime? @map("captured_at")
+  voidedAt     DateTime? @map("voided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, orderId])
+  @@map("payment")
+}

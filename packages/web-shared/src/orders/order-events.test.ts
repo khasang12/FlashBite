@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { statusFromEventType, applyOrderEvent, upsertOrder } from "./order-events";
+import { statusFromEventType, applyOrderEvent, upsertOrder, cancelReasonLabel } from "./order-events";
 import type { OrderView } from "@flashbite/contracts";
 
 const ov = (orderId: string, status: string, updatedAt: string): OrderView => ({
@@ -58,5 +58,24 @@ describe("applyOrderEvent cancelReason", () => {
     const out = applyOrderEvent([row()], { orderId: "o-1", eventType: "OrderAccepted" });
     expect(out[0].status).toBe("ACCEPTED");
     expect(out[0].cancelReason).toBeUndefined();
+  });
+});
+
+describe("cancelReasonLabel", () => {
+  it("returns human-readable label for PAYMENT_FAILED", () => {
+    expect(cancelReasonLabel("PAYMENT_FAILED")).toBe("Payment failed");
+  });
+
+  it("returns human-readable labels for existing reasons", () => {
+    expect(cancelReasonLabel("SLA_BREACH")).toBe("SLA breach");
+    expect(cancelReasonLabel("DECLINED")).toBe("Declined by merchant");
+  });
+
+  it("falls back to the raw reason for unknown values", () => {
+    expect(cancelReasonLabel("UNKNOWN_REASON")).toBe("UNKNOWN_REASON");
+  });
+
+  it("returns empty string for undefined", () => {
+    expect(cancelReasonLabel(undefined)).toBe("");
   });
 });
