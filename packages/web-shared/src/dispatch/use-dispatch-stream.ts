@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import type { DispatchView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
@@ -33,6 +33,8 @@ export function useDispatchStream(driverId: string | undefined): { dispatch: Dis
   const token = useAuthStore((s) => s.token);
 
   useEffect(() => {
+    // The backend resolves the driver from the JWT; driverId only gates the effect
+    // so we don't connect before the authenticated identity is known.
     if (!token || !driverId) return;
     const ctrl = new AbortController();
     void fetchEventSource("/api/read/driver/dispatch/stream", {
@@ -41,6 +43,7 @@ export function useDispatchStream(driverId: string | undefined): { dispatch: Dis
       openWhenHidden: true,
       onopen: async (response: Response) => {
         if (response.status === 401) {
+          setConnected(false);
           useAuthStore.getState().logout();
           throw new Error("unauthorized");
         }
