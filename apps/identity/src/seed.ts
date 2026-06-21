@@ -29,7 +29,7 @@ async function main(): Promise<void> {
         const email = `${driverId}@${tenantId}.test`;
         await prisma.user.upsert({
           where: { email },
-          update: { id, tenantId, role: ROLES.DRIVER, passwordHash },
+          update: { tenantId, role: ROLES.DRIVER, passwordHash },
           create: { id, tenantId, role: ROLES.DRIVER, email, passwordHash },
         });
         // eslint-disable-next-line no-console
