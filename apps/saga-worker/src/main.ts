@@ -49,6 +49,7 @@ export async function startOrderConsumer(
   consumer: Consumer,
   temporal: TemporalHandle,
   slaSeconds: number,
+  confirmSeconds: number,
   registry: SchemaRegistry,
 ): Promise<SagaWorkerHandle> {
   await consumer.connect();
@@ -64,7 +65,7 @@ export async function startOrderConsumer(
           taskQueue: ORDER_SAGA.TASK_QUEUE,
           workflowId: `${envelope.tenantId}:${p.orderId}`,
           workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, totalAmount: p.totalAmount, slaSeconds }],
+          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, totalAmount: p.totalAmount, slaSeconds, confirmSeconds }],
         });
       } catch (err) {
         if (!/already started|WorkflowExecutionAlreadyStarted/i.test(String(err))) throw err;
@@ -86,7 +87,7 @@ async function main(): Promise<void> {
   const kafka = new Kafka({ clientId: "saga-worker", brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
   const consumer = kafka.consumer({ groupId: CONSUMER_GROUPS.SAGA });
   const registry = createRegistry(config.schemaRegistryUrl);
-  const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds, registry);
+  const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds, config.paymentConfirmTimeoutSeconds, registry);
 
   // eslint-disable-next-line no-console
   console.log("saga-worker running");
