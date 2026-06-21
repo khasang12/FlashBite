@@ -1,5 +1,6 @@
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
+import { ApplicationFailure } from "@temporalio/activity";
 import path from "node:path";
 import { orderLifecycleWorkflow, merchantApprovalSignal, confirmPaymentSignal } from "../src/workflows";
 
@@ -14,8 +15,13 @@ describe("orderLifecycleWorkflow", () => {
 
   const calls: string[] = [];
   let authorizeResult = true; // toggled per test
+  let authorizeThrows = false; // simulate a non-retryable payments 4xx
   const stubActivities = {
-    async authorizePaymentActivity() { calls.push("authorize"); return { authorized: authorizeResult }; },
+    async authorizePaymentActivity() {
+      calls.push("authorize");
+      if (authorizeThrows) throw ApplicationFailure.nonRetryable("payments authorize failed: 400", "PaymentClientError");
+      return { authorized: authorizeResult };
+    },
     async capturePaymentActivity() { calls.push("capture"); },
     async voidPaymentActivity() { calls.push("void"); },
     async recordOrderAcceptedActivity() { calls.push("accepted"); },
@@ -111,5 +117,21 @@ describe("orderLifecycleWorkflow", () => {
     expect(result).toBe("CANCELLED_PAYMENT_FAILED");
     expect(calls).toEqual(["authorize", "cancelled:PAYMENT_FAILED"]);
     authorizeResult = true;
+  });
+
+  it("CANCELLED_PAYMENT_FAILED when authorize errors unrecoverably (rejects instead of hanging)", async () => {
+    calls.length = 0; authorizeThrows = true;
+    const result = await runWorker(async () => {
+      const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
+        taskQueue: "test-sla",
+        workflowId: `berlin:payerr-${Date.now()}`,
+        args: [baseArgs("o6", 100000)],
+      });
+      await handle.signal(confirmPaymentSignal);
+      return handle.result();
+    });
+    expect(result).toBe("CANCELLED_PAYMENT_FAILED");
+    expect(calls).toEqual(["authorize", "cancelled:PAYMENT_FAILED"]); // 1 attempt (non-retryable) -> reject
+    authorizeThrows = false;
   });
 });

@@ -6,7 +6,13 @@ export const merchantApprovalSignal = defineSignal<[boolean]>(ORDER_SAGA.MERCHAN
 export const confirmPaymentSignal = defineSignal(ORDER_SAGA.CONFIRM_PAYMENT_SIGNAL);
 
 const { authorizePaymentActivity, capturePaymentActivity, voidPaymentActivity, recordOrderAcceptedActivity, recordOrderCancelledActivity } =
-  proxyActivities<Activities>({ startToCloseTimeout: "1 minute" });
+  proxyActivities<Activities>({
+    startToCloseTimeout: "1 minute",
+    // Bound retries so a persistently-failing activity (e.g. a payments 4xx) can't loop forever
+    // and leave the workflow Running indefinitely. 4xx are thrown non-retryable by the payments
+    // client and fail on the first attempt; transient (5xx/network) errors get a few tries.
+    retry: { maximumAttempts: 5 },
+  });
 
 export interface OrderLifecycleArgs {
   tenantId: string;
@@ -34,7 +40,15 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
     return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_TIMEOUT;
   }
 
-  const { authorized } = await authorizePaymentActivity(args.tenantId, args.orderId, args.totalAmount);
+  // Authorize. A declined hold OR an unrecoverable error (4xx / retries exhausted) rejects the
+  // order — nothing is captured yet, so there is nothing to revert beyond recording the cancel.
+  let authorized: boolean;
+  try {
+    ({ authorized } = await authorizePaymentActivity(args.tenantId, args.orderId, args.totalAmount));
+  } catch {
+    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
+    return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
+  }
   if (!authorized) {
     await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
     return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
@@ -43,7 +57,15 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
   const signalledInTime = await condition(() => approved !== undefined, `${args.slaSeconds}s`);
 
   if (signalledInTime && approved) {
-    await capturePaymentActivity(args.tenantId, args.orderId);
+    // Capture. If it fails unrecoverably, void the hold (best-effort) and reject the order rather
+    // than hanging or leaving an un-captured "accepted" order.
+    try {
+      await capturePaymentActivity(args.tenantId, args.orderId);
+    } catch {
+      await voidPaymentActivity(args.tenantId, args.orderId).catch(() => undefined);
+      await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
+      return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
+    }
     await recordOrderAcceptedActivity(args.tenantId, args.orderId);
     return ORDER_SAGA_RESULTS.ACCEPTED;
   }
