@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import {
   getOrder,
   fetchOrderPayment,
+  confirmPayment,
   paymentStatusLabel,
   cancelReasonLabel,
   StatusPill,
@@ -49,6 +50,8 @@ function OrderTrackingContent({
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   useEffect(() => {
     setStopped(false);
@@ -91,6 +94,21 @@ function OrderTrackingContent({
   }, [orderId, round]);
 
   const isTerminal = order ? TERMINAL.includes(order.status) : false;
+  const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+  const awaitingConfirm = order?.status === ORDER_STATUS.PLACED && paymentStatus === null;
+
+  const onConfirm = async () => {
+    if (!order) return;
+    setConfirming(true);
+    setConfirmError(null);
+    try {
+      await confirmPayment(order.orderId);
+      // saga authorizes shortly; the existing poll surfaces Payment: Authorized
+    } catch {
+      setConfirmError("Couldn't confirm payment. Please try again.");
+      setConfirming(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,6 +132,14 @@ function OrderTrackingContent({
                   <span className="font-semibold">Status</span>
                   <StatusPill status={order.status} />
                 </div>
+                {awaitingConfirm && (
+                  <div className="space-y-2">
+                    <Button className="w-full" disabled={confirming} onClick={onConfirm}>
+                      {confirming ? "Confirming…" : `Confirm payment ${euro(order.totalAmount)}`}
+                    </Button>
+                    {confirmError && <p className="text-sm text-destructive">{confirmError}</p>}
+                  </div>
+                )}
                 {paymentStatusLabel(paymentStatus) && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Payment</span>
@@ -123,7 +149,7 @@ function OrderTrackingContent({
                 {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (
                   <p className="text-sm text-destructive">{cancelReasonLabel(order.cancelReason)}</p>
                 )}
-                {!isTerminal && !stopped && (
+                {!isTerminal && !stopped && !awaitingConfirm && (
                   <p className="text-sm text-muted-foreground">
                     Waiting for the merchant… (saga SLA timer running)
                   </p>
