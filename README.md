@@ -209,7 +209,8 @@ pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
 pnpm payments:generate # (Phase 3c) generate Prisma client for flashbite_payments DB
 pnpm payments:db:create # (Phase 3c, one-time on existing volumes) create flashbite_payments DB
 pnpm payments:db:deploy # (Phase 3c) apply payments DB migrations
-pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword
+pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword (incl. drivers)
+pnpm seed:drivers      # (Phase 3d) re-seed just the driver accounts (drv-1..drv-4@<tenant>.test)
 pnpm register:schemas  # (Phase 3b, one-time) register Avro schemas with BACKWARD compatibility
 ```
 

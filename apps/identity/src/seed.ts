@@ -1,15 +1,10 @@
-import argon2 from "argon2";
 import { PrismaClient } from "@flashbite/shared";
 import { ROLES } from "@flashbite/contracts";
-
-const TENANTS = ["berlin", "tokyo"] as const;
-const SEED_ROLES = [ROLES.CUSTOMER, ROLES.MERCHANT, ROLES.ADMIN] as const;
-const DRIVER_IDS = ["drv-1", "drv-2", "drv-3", "drv-4"] as const;
+import { TENANTS, SEED_ROLES, seedDrivers, hashSeedPassword } from "./seed-shared";
 
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
-  const password = process.env.SEED_USER_PASSWORD ?? "devpassword";
-  const passwordHash = await argon2.hash(password);
+  const passwordHash = await hashSeedPassword();
   try {
     for (const tenantId of TENANTS) {
       for (const role of SEED_ROLES) {
@@ -22,20 +17,9 @@ async function main(): Promise<void> {
         // eslint-disable-next-line no-console
         console.log(`seeded ${email} (${tenantId}/${role})`);
       }
-      // Drivers get stable ids so the JWT sub IS the dispatch driverId. User.id is a
-      // global PK, so keep clean ids in berlin and tenant-suffix the rest.
-      for (const driverId of DRIVER_IDS) {
-        const id = tenantId === "berlin" ? driverId : `${driverId}-${tenantId}`;
-        const email = `${driverId}@${tenantId}.test`;
-        await prisma.user.upsert({
-          where: { email },
-          update: { tenantId, role: ROLES.DRIVER, passwordHash },
-          create: { id, tenantId, role: ROLES.DRIVER, email, passwordHash },
-        });
-        // eslint-disable-next-line no-console
-        console.log(`seeded ${email} (${tenantId}/${ROLES.DRIVER}, id=${id})`);
-      }
     }
+    // Drivers (drv-1..drv-4) are DB user accounts alongside the merchant/customer/admin rows above.
+    await seedDrivers(prisma, passwordHash);
     // Platform operator: cross-tenant console principal (not pinned to a tenant).
     await prisma.user.upsert({
       where: { email: "operator@flashbite.test" },
