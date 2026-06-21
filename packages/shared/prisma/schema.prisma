@@ -47,7 +47,9 @@ model ProcessedEvent {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  // Text PK (not @db.Uuid): drivers are seeded with stable ids (`drv-1`) so the JWT sub == driverId.
+  // Non-driver users still get a client-generated uuid-format id via @default(uuid()).
+  id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
   email        String   @unique
   passwordHash String   @map("password_hash")
