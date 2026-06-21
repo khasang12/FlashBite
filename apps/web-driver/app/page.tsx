@@ -37,10 +37,12 @@ function DriverDashboard() {
   }, [driverId]);
 
   const { dispatch } = useDispatchStream(driverId);
-  // An offer for this driver that they haven't dismissed (rejected/expired) locally and whose
-  // offer window hasn't already lapsed — a snapshot can replay a stale OFFERED record whose
-  // workflow has long since moved on, which we must not present as a live offer.
+  // An offer is only actionable while the driver is online — an offline driver isn't taking jobs,
+  // so we never present an Accept button to them. We also drop offers the driver has dismissed
+  // (rejected/expired) locally and any whose offer window has already lapsed (a snapshot can
+  // replay a stale OFFERED record whose workflow has long since moved on).
   const offer: DispatchView | null =
+    online &&
     dispatch &&
     dispatch.status === DISPATCH_STATUS.OFFERED &&
     dispatch.offeredDriverId === driverId &&
