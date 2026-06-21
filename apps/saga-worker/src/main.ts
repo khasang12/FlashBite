@@ -91,6 +91,7 @@ export async function startDispatchConsumer(
   temporal: TemporalHandle,
   offerTimeoutSeconds: number,
   maxOffers: number,
+  deliverySeconds: number,
   registry: SchemaRegistry,
 ): Promise<SagaWorkerHandle> {
   await consumer.connect();
@@ -106,7 +107,7 @@ export async function startDispatchConsumer(
           taskQueue: DISPATCH_SAGA.TASK_QUEUE,
           workflowId: `dispatch:${envelope.tenantId}:${p.orderId}`,
           workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, offerTimeoutSeconds, maxOffers }],
+          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, offerTimeoutSeconds, maxOffers, deliverySeconds }],
         });
       } catch (err) {
         if (!/already started|WorkflowExecutionAlreadyStarted/i.test(String(err))) throw err;
@@ -131,7 +132,7 @@ async function main(): Promise<void> {
   const orderConsumer = await startOrderConsumer(consumer, temporal, config.sagaSlaSeconds, config.paymentConfirmTimeoutSeconds, registry);
 
   const dispatchConsumer = kafka.consumer({ groupId: CONSUMER_GROUPS.DISPATCH_STARTER });
-  const dispatchHandle = await startDispatchConsumer(dispatchConsumer, temporal, config.dispatchOfferTimeoutSeconds, config.dispatchMaxOffers, registry);
+  const dispatchHandle = await startDispatchConsumer(dispatchConsumer, temporal, config.dispatchOfferTimeoutSeconds, config.dispatchMaxOffers, config.dispatchDeliveryTimeoutSeconds, registry);
 
   // eslint-disable-next-line no-console
   console.log("saga-worker running");

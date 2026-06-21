@@ -86,4 +86,18 @@ describe("driverDispatchWorkflow", () => {
     expect(calls.filter((c) => c.startsWith("offered")).length).toBe(5);
     expect(calls.at(-1)).toBe("failed:NO_DRIVERS_AVAILABLE");
   });
+
+  it("accept but no pickup before deliverySeconds -> releases driver + DELIVERY_TIMEOUT (time-skipped)", async () => {
+    calls.length = 0; queue = ["d1"];
+    const result = await run(async () => {
+      const h = await env.client.workflow.start(driverDispatchWorkflow, {
+        taskQueue: "test-dispatch", workflowId: `disp-deliverto-${Date.now()}`,
+        args: [{ tenantId: "berlin", orderId: "o5", offerTimeoutSeconds: 30, maxOffers: 5, deliverySeconds: 60 }],
+      });
+      await h.signal(dispatchAcceptSignal, "d1"); // accept, but never pickup -> delivery times out
+      return h.result();
+    });
+    expect(result).toBe("FAILED");
+    expect(calls).toEqual(["select:[]", "offered:d1", "busy:d1", "accepted:d1", "idle:d1", "failed:DELIVERY_TIMEOUT"]);
+  });
 });

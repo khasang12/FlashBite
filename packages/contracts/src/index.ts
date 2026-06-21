@@ -182,7 +182,10 @@ export const DISPATCH_SAGA = {
   DELIVER_SIGNAL: "dispatchDeliver",
 } as const;
 
-export const DISPATCH_FAIL_REASONS = { NO_DRIVERS_AVAILABLE: "NO_DRIVERS_AVAILABLE" } as const;
+export const DISPATCH_FAIL_REASONS = {
+  NO_DRIVERS_AVAILABLE: "NO_DRIVERS_AVAILABLE",
+  DELIVERY_TIMEOUT: "DELIVERY_TIMEOUT",
+} as const;
 
 export interface DriverOfferedPayload { orderId: string; driverId: string }
 export interface DispatchAcceptedPayload { orderId: string; driverId: string }
