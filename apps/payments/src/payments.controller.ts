@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Param, Post } from "@nestjs/common";
 import type { PaymentOutcome } from "./payments.service";
 import { PaymentsService } from "./payments.service";
 import { AuthorizeDto, CaptureVoidDto } from "./dto";
@@ -22,5 +22,12 @@ export class PaymentsController {
   @Post("void")
   void(@Body() body: CaptureVoidDto): Promise<PaymentOutcome> {
     return this.payments.void(body.tenantId, body.orderId, body.idempotencyKey);
+  }
+
+  @Get(":tenantId/:orderId")
+  async getPayment(@Param("tenantId") tenantId: string, @Param("orderId") orderId: string) {
+    const row = await this.payments.get(tenantId, orderId);
+    if (!row) throw new NotFoundException(`No payment for ${tenantId}:${orderId}`);
+    return row;
   }
 }

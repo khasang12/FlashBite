@@ -30,7 +30,7 @@ describe("saga-worker Kafka consumer (Avro integration)", () => {
     const envelope = buildEnvelope({ tenantId, eventType: EVENT_TYPES.ORDER_PLACED, version: 1, payload });
 
     const consumer = kafka.consumer({ groupId: `${CONSUMER_GROUPS.SAGA}-test-${Date.now()}` });
-    handle = await startOrderConsumer(consumer, temporal, 300, registry);
+    handle = await startOrderConsumer(consumer, temporal, 300, 120, registry);
 
     const producer = kafka.producer();
     await producer.connect();

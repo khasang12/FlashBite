@@ -1,5 +1,5 @@
 // Re-export the order contracts the frontends consume.
-export type { OrderItem, OrderView } from "@flashbite/contracts";
+export type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contracts";
 export { ORDER_STATUS } from "@flashbite/contracts";
 
 // Design-system primitives (shadcn/ui, new-york).
@@ -46,13 +46,13 @@ export {
 } from "./components/ui/carousel";
 
 export {
-  placeOrder, getOrder, listOrders, acceptOrder, declineOrder,
+  placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
-export { statusFromEventType, upsertOrder, applyOrderEvent, cancelReasonLabel, type OrderStreamEvent } from "./orders/order-events";
+export { statusFromEventType, upsertOrder, applyOrderEvent, cancelReasonLabel, paymentStatusLabel, type OrderStreamEvent } from "./orders/order-events";
 export {
   aggregateGmv, gmvByTenant, statusBreakdown, topSkus, gmvOverTime, orderCounts, replaceTenantOrders,
   type TenantGmv, type TenantStatusCounts, type SkuCount, type GmvBucket, type OrderCounts,

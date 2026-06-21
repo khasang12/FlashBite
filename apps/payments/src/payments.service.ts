@@ -45,6 +45,13 @@ export class PaymentsService {
     return this.transition(tenantId, orderId, nextOnCapture, "capturedAt", "captured");
   }
 
+  /** Read a payment by natural key. Returns null when none exists (caller maps to 404). */
+  async get(tenantId: string, orderId: string): Promise<{ orderId: string; status: PaymentStatus; amount: number } | null> {
+    const row = await this.prisma.payment.findUnique({ where: { tenantId_orderId: { tenantId, orderId } } });
+    if (!row) return null;
+    return { orderId: row.orderId, status: row.status as PaymentStatus, amount: row.amount };
+  }
+
   async void(tenantId: string, orderId: string, idempotencyKey: string): Promise<PaymentOutcome> {
     // eslint-disable-next-line no-console
     console.log(`[void] ${idempotencyKey} tenant=${tenantId} order=${orderId}`);

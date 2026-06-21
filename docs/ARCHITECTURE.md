@@ -102,7 +102,7 @@ They are intentionally **disconnected today** — no backend assigns a driver to
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
-| `saga-worker` | TS worker + Temporal | — | One workflow per order: **authorize** (via `payments` :3004) → race SLA timer vs merchant approval → **capture** (accept) or **void** (decline / SLA breach). A declined authorize produces `PAYMENT_FAILED` → `OrderCancelled`. Its accept/cancel activities drive the same Order aggregate (state-machine guarded, expected-version append). |
+| `saga-worker` | TS worker + Temporal | — | One workflow per order: wait for the customer **confirmPayment** signal (timeout → `PAYMENT_TIMEOUT`) → **authorize** (via `payments` :3004) → race SLA timer vs merchant approval → **capture** (accept) or **void** (decline / SLA breach). A declined authorize produces `PAYMENT_FAILED` → `OrderCancelled`. Merchant accept/decline is gated on an `AUTHORIZED` payment (write-api `409` otherwise). Its accept/cancel activities drive the same Order aggregate (state-machine guarded, expected-version append). |
 | `telemetry-worker` | TS worker | — | Consumes `telemetry-streams`, `GEOADD`s drivers into the per-tenant Redis geo key. |
 | `web-customer` | Next.js | 3100 | Storefront: menu, cart, checkout, live order tracking. |
 | `web-merchant` | Next.js | 3101 | Order queue (live SSE), accept/decline. |
@@ -254,10 +254,31 @@ flowchart LR
   for the same order can't both win — the loser gets a `ConcurrencyError`.
 - **Version-guarded projection:** the read model only moves forward (`existing.version < event.version`).
 - **Saga compensation (Phase 3c):** on decline or SLA breach the workflow voids the authorization before recording the cancellation — the textbook saga compensation shape. On `PAYMENT_FAILED` (authorization declined at the start), the workflow goes straight to cancellation without a void. The `payments` service is a real NestJS service with its own `flashbite_payments` DB (not a fake activity).
+- **Payment UI is read-only and read-through (Phase 3c-ii):** payment state stays owned by the `payments` service — it is **not** copied into the order read model. The customer tracking page reads it live via read-api (see below); cancelled orders render a readable reason via the shared `cancelReasonLabel` helper.
+- **Customer payment confirmation (Phase 3c-iii):** the saga waits for a customer `confirmPayment` signal before authorizing; no confirm within `PAYMENT_CONFIRM_TIMEOUT_SECONDS` cancels with `PAYMENT_TIMEOUT` ("Payment not confirmed"). The merchant may view but not accept/decline an order until its payment is `AUTHORIZED` — write-api returns `409` otherwise, and the merchant UI shows "Awaiting customer payment". The customer tracking page shows a "Confirm payment €X" button while awaiting.
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
   serde lives in `@flashbite/messaging`; schema definitions live in `@flashbite/contracts`.
+
+### Payment UI read path (Phase 3c-ii)
+
+The customer tracking page shows payment progress without copying payment state into the order read
+model. read-api exposes `GET /orders/:orderId/payment` (tenant derived from the JWT, never a param),
+which calls the `payments` service server-to-server (`GET /payments/:tenantId/:orderId`) via a small
+`PaymentsClient` and returns `{ status }` or `{ status: null }` (200 with `null` when no payment
+exists yet — distinct from an error). Frontends never call `payments` directly. The customer page
+polls this on the same cadence as the order, mapping the status to a friendly label
+(`paymentStatusLabel`: AUTHORIZED to "Authorized", CAPTURED to "Paid", VOIDED to "Voided", DECLINED
+to "Declined").
+
+```
+web-customer tracking
+  -> GET /api/read/orders/:id            (order status, polled)
+  -> GET /api/read/orders/:id/payment    (payment status, polled)
+read-api  -> GET payments :3004 /payments/{tenant}/{order}
+          -> flashbite_payments ledger
+```
 
 ### Event bus: Avro + Schema Registry (Phase 3b)
 

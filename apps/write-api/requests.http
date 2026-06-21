@@ -101,6 +101,10 @@ Content-Type: application/json
   "password": "{{seedPassword}}"
 }
 
+### Phase 3c-iii — customer confirms payment (unblocks the saga authorize). Expect 202.
+POST {{baseUrl}}/orders/{{orderId}}/confirm-payment
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
+
 ### Operator: all orders across every tenant. Expect 200 OrderView[] spanning berlin + tokyo.
 GET {{readUrl}}/admin/orders
 Authorization: Bearer {{loginOperator.response.body.$.accessToken}}
@@ -254,6 +258,15 @@ Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 ### Tenant isolation: the berlin order is NOT visible to a tokyo token -> 404
 GET {{readUrl}}/orders/{{orderId}}
 Authorization: Bearer {{loginTokyo.response.body.$.accessToken}}
+
+### Phase 3c-ii — payment status for an order (tenant from JWT, read-through to payments).
+### 200 { "status": "AUTHORIZED" | "CAPTURED" | "VOIDED" | "DECLINED" } or { "status": null }.
+GET {{readUrl}}/orders/{{orderId}}/payment
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
+
+### Internal payments read (no JWT) — what read-api calls server-to-server. @payments = :3004.
+### Run pnpm dev:payments first. 200 { orderId, status, amount } or 404 when no payment.
+GET http://localhost:3004/payments/berlin/{{orderId}}
 
 ### SSE merchant feed (streams live order events for the tenant).
 ### This connection stays OPEN — place an order on write-api in another request

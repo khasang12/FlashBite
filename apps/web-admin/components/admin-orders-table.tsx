@@ -1,5 +1,5 @@
 "use client";
-import { DataTable, StatusPill, type ColumnDef, type OrderView } from "@flashbite/web-shared";
+import { DataTable, StatusPill, cancelReasonLabel, type ColumnDef, type OrderView } from "@flashbite/web-shared";
 
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 const shortId = (id: string) => `#${id.slice(0, 8)}`;
@@ -16,7 +16,9 @@ const columns: ColumnDef<OrderView>[] = [
     cell: ({ row }) => (
       <span className="flex items-center gap-2">
         <StatusPill status={row.original.status} />
-        {row.original.cancelReason ? <span className="text-xs text-muted-foreground">{row.original.cancelReason}</span> : null}
+        {cancelReasonLabel(row.original.cancelReason) ? (
+          <span className="text-xs text-muted-foreground">{cancelReasonLabel(row.original.cancelReason)}</span>
+        ) : null}
       </span>
     ),
   },

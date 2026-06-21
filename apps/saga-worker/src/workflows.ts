@@ -3,6 +3,7 @@ import { ORDER_SAGA, ORDER_SAGA_RESULTS, ORDER_CANCEL_REASONS } from "@flashbite
 import type { Activities } from "./activities";
 
 export const merchantApprovalSignal = defineSignal<[boolean]>(ORDER_SAGA.MERCHANT_APPROVAL_SIGNAL);
+export const confirmPaymentSignal = defineSignal(ORDER_SAGA.CONFIRM_PAYMENT_SIGNAL);
 
 const { authorizePaymentActivity, capturePaymentActivity, voidPaymentActivity, recordOrderAcceptedActivity, recordOrderCancelledActivity } =
   proxyActivities<Activities>({ startToCloseTimeout: "1 minute" });
@@ -12,16 +13,26 @@ export interface OrderLifecycleArgs {
   orderId: string;
   totalAmount: number;
   slaSeconds: number;
+  confirmSeconds: number;
 }
 
 /**
- * Authorize a hold -> race the SLA timer against the merchant-approval signal.
+ * Wait for the customer to confirm payment -> authorize a hold -> race the SLA timer against
+ * the merchant-approval signal. No confirm in time -> OrderCancelled(PAYMENT_TIMEOUT), no authorize.
  * Declined authorize -> OrderCancelled(PAYMENT_FAILED). Approved in time -> capture + OrderAccepted.
  * Declined or SLA breach -> void + OrderCancelled. Deterministic: all I/O is in activities.
  */
 export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<string> {
   let approved: boolean | undefined;
+  let confirmed = false;
   setHandler(merchantApprovalSignal, (value) => { approved = value; });
+  setHandler(confirmPaymentSignal, () => { confirmed = true; });
+
+  const confirmedInTime = await condition(() => confirmed, `${args.confirmSeconds}s`);
+  if (!confirmedInTime) {
+    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_TIMEOUT);
+    return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_TIMEOUT;
+  }
 
   const { authorized } = await authorizePaymentActivity(args.tenantId, args.orderId, args.totalAmount);
   if (!authorized) {

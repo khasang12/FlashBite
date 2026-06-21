@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { connectTemporal, appendWithExpectedVersion, TemporalHandle } from "@flashbite/shared";
 import { AGGREGATE_TYPES, EVENT_TYPES, ORDER_CANCEL_REASONS } from "@flashbite/contracts";
+import { confirmPaymentSignal } from "../src/workflows";
 import { startSagaWorker, SagaWorkerHandle } from "../src/main";
 
 describe("saga-worker payment-failed (e2e: declined authorize)", () => {
@@ -35,8 +36,9 @@ describe("saga-worker payment-failed (e2e: declined authorize)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: declineAmount, slaSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: declineAmount, slaSeconds: 60, confirmSeconds: 60 }],
     });
+    await handle.signal(confirmPaymentSignal);
     const result = await handle.result();
     expect(result).toBe("CANCELLED_PAYMENT_FAILED");
 

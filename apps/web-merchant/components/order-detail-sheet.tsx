@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, Button, StatusPill,
-  acceptOrder, declineOrder, ORDER_STATUS, type OrderView,
+  acceptOrder, declineOrder, cancelReasonLabel, fetchOrderPayment, ORDER_STATUS, type OrderView,
 } from "@flashbite/web-shared";
 
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
@@ -15,10 +15,18 @@ export function OrderDetailSheet({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
     setBusy(false);
+    setPaymentStatus(null);
+    if (!order) return;
+    let active = true;
+    fetchOrderPayment(order.orderId)
+      .then((p) => { if (active) setPaymentStatus(p.status); })
+      .catch(() => { if (active) setPaymentStatus(null); });
+    return () => { active = false; };
   }, [order?.orderId]);
 
   const act = async (fn: (id: string) => Promise<void>) => {
@@ -43,7 +51,12 @@ export function OrderDetailSheet({
               <SheetTitle>Order #{order.orderId.slice(0, 8)}</SheetTitle>
               <SheetDescription>Order details and merchant actions.</SheetDescription>
             </SheetHeader>
-            <div className="mt-3"><StatusPill status={order.status} /></div>
+            <div className="mt-3 flex items-center gap-2">
+              <StatusPill status={order.status} />
+              {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (
+                <span className="text-xs text-muted-foreground">{cancelReasonLabel(order.cancelReason)}</span>
+              )}
+            </div>
             <div className="mt-4 text-sm text-muted-foreground">Customer</div>
             <div className="font-semibold">{order.customerId}</div>
             <div className="mt-4 text-sm text-muted-foreground">Items</div>
@@ -59,14 +72,18 @@ export function OrderDetailSheet({
             </div>
             {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
             {order.status === ORDER_STATUS.PLACED && (
-              <div className="mt-6 flex gap-2">
-                <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => act(declineOrder)}>
-                  {busy ? "…" : "Decline"}
-                </Button>
-                <Button className="flex-1" disabled={busy} onClick={() => act(acceptOrder)}>
-                  {busy ? "…" : "Accept"}
-                </Button>
-              </div>
+              paymentStatus === "AUTHORIZED" ? (
+                <div className="mt-6 flex gap-2">
+                  <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => act(declineOrder)}>
+                    {busy ? "…" : "Decline"}
+                  </Button>
+                  <Button className="flex-1" disabled={busy} onClick={() => act(acceptOrder)}>
+                    {busy ? "…" : "Accept"}
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-6 text-sm text-muted-foreground">Awaiting customer payment…</p>
+              )
             )}
           </>
         )}

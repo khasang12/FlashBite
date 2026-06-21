@@ -14,6 +14,7 @@ export interface AppConfig {
   redisClusterNodes: RedisNode[];
   temporalAddress: string;
   sagaSlaSeconds: number;
+  paymentConfirmTimeoutSeconds: number;
   jwtIssuer: string;
   jwtAudience: string;
   jwtAccessTtl: number;
@@ -65,6 +66,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     redisClusterNodes,
     temporalAddress: env.TEMPORAL_ADDRESS ?? "localhost:7233",
     sagaSlaSeconds: Number(env.SAGA_SLA_SECONDS ?? 300),
+    paymentConfirmTimeoutSeconds: Number(env.PAYMENT_CONFIRM_TIMEOUT_SECONDS ?? 120),
     jwtIssuer: env.JWT_ISSUER ?? "flashbite-identity",
     jwtAudience: env.JWT_AUDIENCE ?? "flashbite",
     jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 3600),

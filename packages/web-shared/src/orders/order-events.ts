@@ -26,10 +26,23 @@ const CANCEL_REASON_LABELS: Record<string, string> = {
   SLA_BREACH: "SLA breach",
   DECLINED: "Declined by merchant",
   PAYMENT_FAILED: "Payment failed",
+  PAYMENT_TIMEOUT: "Payment not confirmed",
 };
 
 export function cancelReasonLabel(reason: string | undefined): string {
   return reason ? (CANCEL_REASON_LABELS[reason] ?? reason) : "";
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  AUTHORIZED: "Authorized",
+  CAPTURED: "Paid",
+  VOIDED: "Voided",
+  DECLINED: "Declined",
+};
+
+/** Customer-friendly payment status label. Empty string for null/unknown (render nothing). */
+export function paymentStatusLabel(status: string | null | undefined): string {
+  return status ? (PAYMENT_STATUS_LABELS[status] ?? "") : "";
 }
 
 /** Apply a live SSE event to existing rows: update a known order's status in place.
