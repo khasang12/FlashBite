@@ -105,6 +105,28 @@ Content-Type: application/json
 POST {{baseUrl}}/orders/{{orderId}}/confirm-payment
 Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
+### Phase 3d — log in as a berlin driver. Expect 201.
+# @name loginDriver
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "driver@berlin.test", "password": "{{seedPassword}}" }
+
+### Driver goes online (so dispatch can offer jobs). Expect 202.
+POST {{readUrl}}/drivers/{{driverId}}/online
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+
+### Driver accepts / picks up / delivers the dispatch (after an order is accepted). Expect 202.
+POST {{baseUrl}}/dispatch/{{orderId}}/accept
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "driverId": "{{driverId}}" }
+
+### Current dispatch for an order (assigned driver + status).
+GET {{readUrl}}/orders/{{orderId}}/dispatch
+Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
+
 ### Operator: all orders across every tenant. Expect 200 OrderView[] spanning berlin + tokyo.
 GET {{readUrl}}/admin/orders
 Authorization: Bearer {{loginOperator.response.body.$.accessToken}}
