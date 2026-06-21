@@ -1,3 +1,4 @@
+import { ApplicationFailure } from "@temporalio/activity";
 import type { PaymentResponse } from "@flashbite/contracts";
 
 async function post(baseUrl: string, path: string, body: unknown): Promise<PaymentResponse> {
@@ -6,7 +7,15 @@ async function post(baseUrl: string, path: string, body: unknown): Promise<Payme
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`payments ${path} failed: ${res.status}`);
+  if (!res.ok) {
+    const msg = `payments ${path} failed: ${res.status}`;
+    // 4xx is a permanent client error (bad request / illegal transition) — never retry it,
+    // or the activity loops forever. 5xx / network errors stay retryable (plain Error).
+    if (res.status >= 400 && res.status < 500) {
+      throw ApplicationFailure.nonRetryable(msg, "PaymentClientError");
+    }
+    throw new Error(msg);
+  }
   return (await res.json()) as PaymentResponse;
 }
 
