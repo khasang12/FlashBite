@@ -26,7 +26,7 @@
 @identityUrl = http://localhost:3003
 @seedPassword = devpassword
 # Fixed id so the "place" + "re-place" pair below exercises idempotency.
-@orderId = 31111111-1111-1111-1111-111111111112
+@orderId = d7bcf6c1-96b0-48bb-8a38-346b6de807a1
 # Fixed driver id so the location POST + nearby query below correlate.
 @driverId = drv-1
 
@@ -105,6 +105,15 @@ Content-Type: application/json
 POST {{baseUrl}}/orders/{{orderId}}/confirm-payment
 Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
 
+### Merchant accepts the order (captures payment + emits OrderAccepted -> starts dispatch). Expect 202.
+### Requires the payment to be AUTHORIZED (confirm-payment above) or this returns 409.
+POST {{baseUrl}}/orders/{{orderId}}/accept
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### Merchant declines the order instead. Expect 202.
+POST {{baseUrl}}/orders/{{orderId}}/decline
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
 ### Phase 3d — log in as a berlin driver. Expect 201.
 # @name loginDriver
 POST {{identityUrl}}/auth/login
@@ -116,16 +125,47 @@ Content-Type: application/json
 POST {{readUrl}}/drivers/{{driverId}}/online
 Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
 
-### Driver accepts / picks up / delivers the dispatch (after an order is accepted). Expect 202.
+### Driver accepts the offered dispatch (within DISPATCH_OFFER_TIMEOUT_SECONDS of OrderAccepted).
+### -> DISPATCHED. Expect 202. 404 "No active dispatch" = the offer lapsed or the driver
+### wasn't online+located at accept time (start dev:telemetry, go online, then place the order).
 POST {{baseUrl}}/dispatch/{{orderId}}/accept
 Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
 Content-Type: application/json
 
 { "driverId": "{{driverId}}" }
 
-### Current dispatch for an order (assigned driver + status).
+### Driver marks the order picked up -> PICKED_UP. Expect 202.
+POST {{baseUrl}}/dispatch/{{orderId}}/pickup
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "driverId": "{{driverId}}" }
+
+### Driver marks the order delivered -> DELIVERED (terminal; driver released). Expect 202.
+POST {{baseUrl}}/dispatch/{{orderId}}/deliver
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "driverId": "{{driverId}}" }
+
+### Driver rejects the offer instead -> re-offers the next-nearest driver. Expect 202.
+POST {{baseUrl}}/dispatch/{{orderId}}/reject
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "driverId": "{{driverId}}" }
+
+### Current dispatch for an order (assigned driver + status). OFFERED -> DISPATCHED -> PICKED_UP -> DELIVERED.
 GET {{readUrl}}/orders/{{orderId}}/dispatch
 Authorization: Bearer {{loginCustomer.response.body.$.accessToken}}
+
+### The driver's current offer / active job (driver token).
+GET {{readUrl}}/driver/dispatch?driverId={{driverId}}
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
+
+### Driver goes offline (stops receiving offers). Expect 202.
+POST {{readUrl}}/drivers/{{driverId}}/offline
+Authorization: Bearer {{loginDriver.response.body.$.accessToken}}
 
 ### Operator: all orders across every tenant. Expect 200 OrderView[] spanning berlin + tokyo.
 GET {{readUrl}}/admin/orders
