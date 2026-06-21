@@ -1,7 +1,7 @@
 import { firstValueFrom } from "rxjs";
 import { take, toArray } from "rxjs/operators";
 import { DispatchStreamService } from "../src/sse/dispatch-stream.service";
-import { isForDriver } from "../src/sse/driver-sse.controller";
+import { isForDriver, acceptForDriver } from "../src/sse/driver-sse.controller";
 import type { DispatchView } from "@flashbite/contracts";
 
 const view = (over: Partial<DispatchView> = {}): DispatchView => ({
@@ -37,5 +37,27 @@ describe("isForDriver", () => {
   it("rejects another driver's offer/job", () => {
     expect(isForDriver(view({ status: "OFFERED", offeredDriverId: "drv-2" }), "drv-1")).toBe(false);
     expect(isForDriver(view({ status: "DISPATCHED", driverId: "drv-2", offeredDriverId: undefined }), "drv-1")).toBe(false);
+  });
+});
+
+describe("acceptForDriver (per-connection owned-order tracking)", () => {
+  it("emits and tracks a job assigned to the driver, then emits its follow-up events", () => {
+    const owned = new Set<string>();
+    expect(acceptForDriver(owned, view({ status: "DISPATCHED", driverId: "drv-1", offeredDriverId: undefined }), "drv-1")).toBe(true);
+    // follow-up PICKED_UP / DELIVERED carry no driver id but share the owned orderId
+    expect(acceptForDriver(owned, view({ status: "PICKED_UP", driverId: undefined, offeredDriverId: undefined }), "drv-1")).toBe(true);
+    expect(acceptForDriver(owned, view({ status: "DELIVERED", driverId: undefined, offeredDriverId: undefined }), "drv-1")).toBe(true);
+  });
+  it("emits an offer to the driver but does NOT start tracking it (offer may go to someone else)", () => {
+    const owned = new Set<string>();
+    expect(acceptForDriver(owned, view({ status: "OFFERED", offeredDriverId: "drv-1" }), "drv-1")).toBe(true);
+    // a later event for that same order assigned to ANOTHER driver must not leak to drv-1
+    expect(acceptForDriver(owned, view({ status: "DISPATCHED", driverId: "drv-2", offeredDriverId: undefined }), "drv-1")).toBe(false);
+    expect(acceptForDriver(owned, view({ status: "PICKED_UP", driverId: undefined, offeredDriverId: undefined }), "drv-1")).toBe(false);
+  });
+  it("does not emit another driver's job or its follow-ups", () => {
+    const owned = new Set<string>();
+    expect(acceptForDriver(owned, view({ status: "DISPATCHED", driverId: "drv-2", offeredDriverId: undefined }), "drv-1")).toBe(false);
+    expect(acceptForDriver(owned, view({ status: "DELIVERED", driverId: undefined, offeredDriverId: undefined }), "drv-1")).toBe(false);
   });
 });
