@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, DISPATCH_OFFER_TIMEOUT_SECONDS, type DispatchView } from "@flashbite/web-shared";
 
 function secondsLeft(updatedAt: string): number {
@@ -14,16 +14,21 @@ export function OfferCard({ offer, onAccept, onReject, onExpire }: {
   onExpire: () => void;
 }) {
   const [left, setLeft] = useState(() => secondsLeft(offer.updatedAt));
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
     setLeft(secondsLeft(offer.updatedAt));
     const t = setInterval(() => {
       const s = secondsLeft(offer.updatedAt);
       setLeft(s);
-      if (s <= 0) onExpire();
+      if (s <= 0) {
+        clearInterval(t);
+        onExpireRef.current();
+      }
     }, 1000);
     return () => clearInterval(t);
-  }, [offer.updatedAt, offer.orderId, onExpire]);
+  }, [offer.updatedAt, offer.orderId]);
 
   return (
     <div className="rounded-xl border border-primary/40 bg-primary/5 px-5 py-4">
