@@ -87,8 +87,10 @@ flowchart LR
 - **Telemetry plane** (ephemeral): driver GPS pings into a Redis geo index. Never persisted to
   Postgres; not part of the order aggregate.
 
-They are intentionally **disconnected today** — no backend assigns a driver to an order (that
-"driver dispatch" loop is backlogged).
+Since Phase 3d the two planes are **joined by driver dispatch**: after an order is accepted, the
+saga's `driverDispatchWorkflow` (a child of the order workflow) offers the job to the nearest
+**online + geolocated** driver — selecting from the telemetry plane's Redis online set ∩ geo index —
+and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii notes below).
 
 ---
 
