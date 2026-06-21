@@ -43,7 +43,6 @@ describe("contracts constants", () => {
       SAGA: "saga-worker",
       READ_API_SSE: "read-api-sse",
       TELEMETRY: "telemetry-worker",
-      DISPATCH_STARTER: "dispatch-starter",
       DISPATCH_PROJECTION: "dispatch-projection",
     });
     expect(CONSUMERS.PROJECTION).toBe("projection-worker");
@@ -63,6 +62,8 @@ describe("contracts constants", () => {
       CANCELLED_DECLINED: "CANCELLED_DECLINED",
       CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
       CANCELLED_PAYMENT_TIMEOUT: "CANCELLED_PAYMENT_TIMEOUT",
+      DELIVERED: "DELIVERED",
+      DISPATCH_FAILED: "DISPATCH_FAILED",
     });
     expect(ORDER_CANCEL_REASONS).toEqual({
       SLA_BREACH: "SLA_BREACH",

@@ -101,7 +101,6 @@ export const CONSUMER_GROUPS = {
   SAGA: "saga-worker",
   READ_API_SSE: "read-api-sse",
   TELEMETRY: "telemetry-worker",
-  DISPATCH_STARTER: "dispatch-starter",
   DISPATCH_PROJECTION: "dispatch-projection",
 } as const;
 
@@ -153,6 +152,8 @@ export const ORDER_SAGA_RESULTS = {
   CANCELLED_DECLINED: "CANCELLED_DECLINED",
   CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
   CANCELLED_PAYMENT_TIMEOUT: "CANCELLED_PAYMENT_TIMEOUT",
+  DELIVERED: "DELIVERED",
+  DISPATCH_FAILED: "DISPATCH_FAILED",
 } as const;
 
 /** Reason recorded on an OrderCancelled event. */

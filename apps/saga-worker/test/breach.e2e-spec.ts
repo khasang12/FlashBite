@@ -27,7 +27,7 @@ describe("saga-worker SLA breach (e2e)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 2, confirmSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 2, confirmSeconds: 60, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
     await handle.signal(confirmPaymentSignal);
     const result = await handle.result();

@@ -2,7 +2,17 @@ import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import { ApplicationFailure } from "@temporalio/activity";
 import path from "node:path";
-import { orderLifecycleWorkflow, merchantApprovalSignal, confirmPaymentSignal } from "../src/workflows";
+import { orderLifecycleWorkflow, merchantApprovalSignal, confirmPaymentSignal, dispatchResult } from "../src/workflows";
+import { DISPATCH_STATUS } from "@flashbite/contracts";
+
+describe("dispatchResult (order maps the dispatch child outcome)", () => {
+  it("DELIVERED -> DELIVERED", () => {
+    expect(dispatchResult(DISPATCH_STATUS.DELIVERED)).toBe("DELIVERED");
+  });
+  it("FAILED -> DISPATCH_FAILED", () => {
+    expect(dispatchResult(DISPATCH_STATUS.FAILED)).toBe("DISPATCH_FAILED");
+  });
+});
 
 describe("orderLifecycleWorkflow", () => {
   let env: TestWorkflowEnvironment;
@@ -26,6 +36,15 @@ describe("orderLifecycleWorkflow", () => {
     async voidPaymentActivity() { calls.push("void"); },
     async recordOrderAcceptedActivity() { calls.push("accepted"); },
     async recordOrderCancelledActivity(_t: string, _o: string, reason: string) { calls.push(`cancelled:${reason}`); },
+    // dispatch child activities — default: no driver available, so the child fails fast.
+    async selectNearestAvailableDriverActivity() { calls.push("select"); return null; },
+    async markBusyActivity() { calls.push("busy"); },
+    async clearBusyActivity() { calls.push("idle"); },
+    async recordDriverOfferedActivity() { calls.push("offered"); },
+    async recordDispatchAcceptedActivity() { calls.push("dispatch-accepted"); },
+    async recordOrderPickedUpActivity() { calls.push("pickedup"); },
+    async recordOrderDeliveredActivity() { calls.push("delivered"); },
+    async recordDispatchFailedActivity(_t: string, _o: string, reason: string) { calls.push(`dispatch-failed:${reason}`); },
   };
 
   async function runWorker<T>(fn: () => Promise<T>): Promise<T> {
@@ -40,9 +59,10 @@ describe("orderLifecycleWorkflow", () => {
 
   const baseArgs = (orderId: string, totalAmount = 1200) => ({
     tenantId: "berlin", orderId, totalAmount, slaSeconds: 300, confirmSeconds: 300,
+    offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300,
   });
 
-  it("ACCEPTED when confirmed, then approved before the SLA", async () => {
+  it("captures + accepts, then runs the dispatch child and maps its result (no driver -> DISPATCH_FAILED)", async () => {
     calls.length = 0; authorizeResult = true;
     const result = await runWorker(async () => {
       const handle = await env.client.workflow.start(orderLifecycleWorkflow, {
@@ -54,8 +74,10 @@ describe("orderLifecycleWorkflow", () => {
       await handle.signal(merchantApprovalSignal, true);
       return handle.result();
     });
-    expect(result).toBe("ACCEPTED");
-    expect(calls).toEqual(["authorize", "capture", "accepted"]);
+    // After accept the order workflow executes the dispatch child; with no available driver the child
+    // ends DispatchFailed and the parent maps it to DISPATCH_FAILED. (Full DELIVERED path: dispatch e2e.)
+    expect(result).toBe("DISPATCH_FAILED");
+    expect(calls).toEqual(["authorize", "capture", "accepted", "select", "dispatch-failed:NO_DRIVERS_AVAILABLE"]);
   });
 
   it("CANCELLED_PAYMENT_TIMEOUT when the customer never confirms (time-skipped)", async () => {

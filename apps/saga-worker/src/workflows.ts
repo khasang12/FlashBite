@@ -1,6 +1,7 @@
-import { proxyActivities, condition, defineSignal, setHandler } from "@temporalio/workflow";
-import { ORDER_SAGA, ORDER_SAGA_RESULTS, ORDER_CANCEL_REASONS } from "@flashbite/contracts";
+import { proxyActivities, condition, defineSignal, setHandler, executeChild } from "@temporalio/workflow";
+import { ORDER_SAGA, ORDER_SAGA_RESULTS, ORDER_CANCEL_REASONS, DISPATCH_STATUS } from "@flashbite/contracts";
 import type { Activities } from "./activities";
+import { driverDispatchWorkflow } from "./dispatch-workflow";
 
 export const merchantApprovalSignal = defineSignal<[boolean]>(ORDER_SAGA.MERCHANT_APPROVAL_SIGNAL);
 export const confirmPaymentSignal = defineSignal(ORDER_SAGA.CONFIRM_PAYMENT_SIGNAL);
@@ -20,6 +21,18 @@ export interface OrderLifecycleArgs {
   totalAmount: number;
   slaSeconds: number;
   confirmSeconds: number;
+  // Dispatch knobs threaded into the child driverDispatchWorkflow on acceptance.
+  offerTimeoutSeconds: number;
+  maxOffers: number;
+  deliverySeconds: number;
+}
+
+/** Map a driverDispatchWorkflow outcome to the order saga's terminal result. Delivered fulfils the
+ *  order; any other terminal dispatch state (FAILED, or a crashed child) leaves it DISPATCH_FAILED. */
+export function dispatchResult(dispatchOutcome: string): string {
+  return dispatchOutcome === DISPATCH_STATUS.DELIVERED
+    ? ORDER_SAGA_RESULTS.DELIVERED
+    : ORDER_SAGA_RESULTS.DISPATCH_FAILED;
 }
 
 /**
@@ -67,7 +80,26 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
       return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
     }
     await recordOrderAcceptedActivity(args.tenantId, args.orderId);
-    return ORDER_SAGA_RESULTS.ACCEPTED;
+    // Orchestrate the fulfillment leg as a child workflow — one workflow tree per order. A child
+    // that *returns* FAILED and one that *throws* (e.g. an activity exhausts its retries) both mean
+    // the same thing to the order: dispatch did not deliver. The order stays ACCEPTED either way
+    // (requeue/refund on dispatch failure is backlog), so map both to DISPATCH_FAILED.
+    let dispatchOutcome: string;
+    try {
+      dispatchOutcome = await executeChild(driverDispatchWorkflow, {
+        workflowId: `dispatch:${args.tenantId}:${args.orderId}`,
+        args: [{
+          tenantId: args.tenantId,
+          orderId: args.orderId,
+          offerTimeoutSeconds: args.offerTimeoutSeconds,
+          maxOffers: args.maxOffers,
+          deliverySeconds: args.deliverySeconds,
+        }],
+      });
+    } catch {
+      return ORDER_SAGA_RESULTS.DISPATCH_FAILED;
+    }
+    return dispatchResult(dispatchOutcome);
   }
 
   await voidPaymentActivity(args.tenantId, args.orderId);
@@ -76,4 +108,4 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
   return reason === ORDER_CANCEL_REASONS.SLA_BREACH ? ORDER_SAGA_RESULTS.CANCELLED_SLA : ORDER_SAGA_RESULTS.CANCELLED_DECLINED;
 }
 
-export { driverDispatchWorkflow } from "./dispatch-workflow";
+export { driverDispatchWorkflow };
