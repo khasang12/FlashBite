@@ -14,8 +14,9 @@ import { NearbyTable } from "@/components/nearby-table";
 const DRIVERS = ["drv-1", "drv-2", "drv-3", "drv-4"];
 
 const DRIVER_DEMOS = [
-  { label: "Berlin driver", email: "driver@berlin.test" },
-  { label: "Tokyo driver", email: "driver@tokyo.test" },
+  { label: "Berlin drv-1", email: "drv-1@berlin.test" },
+  { label: "Berlin drv-2", email: "drv-2@berlin.test" },
+  { label: "Tokyo drv-1", email: "drv-1@tokyo.test" },
 ];
 
 function DriverDashboard() {

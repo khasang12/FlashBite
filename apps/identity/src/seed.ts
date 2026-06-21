@@ -3,7 +3,8 @@ import { PrismaClient } from "@flashbite/shared";
 import { ROLES } from "@flashbite/contracts";
 
 const TENANTS = ["berlin", "tokyo"] as const;
-const SEED_ROLES = [ROLES.CUSTOMER, ROLES.MERCHANT, ROLES.DRIVER, ROLES.ADMIN] as const;
+const SEED_ROLES = [ROLES.CUSTOMER, ROLES.MERCHANT, ROLES.ADMIN] as const;
+const DRIVER_IDS = ["drv-1", "drv-2", "drv-3", "drv-4"] as const;
 
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
@@ -20,6 +21,19 @@ async function main(): Promise<void> {
         });
         // eslint-disable-next-line no-console
         console.log(`seeded ${email} (${tenantId}/${role})`);
+      }
+      // Drivers get stable ids so the JWT sub IS the dispatch driverId. User.id is a
+      // global PK, so keep clean ids in berlin and tenant-suffix the rest.
+      for (const driverId of DRIVER_IDS) {
+        const id = tenantId === "berlin" ? driverId : `${driverId}-${tenantId}`;
+        const email = `${driverId}@${tenantId}.test`;
+        await prisma.user.upsert({
+          where: { email },
+          update: { id, tenantId, role: ROLES.DRIVER, passwordHash },
+          create: { id, tenantId, role: ROLES.DRIVER, email, passwordHash },
+        });
+        // eslint-disable-next-line no-console
+        console.log(`seeded ${email} (${tenantId}/${ROLES.DRIVER}, id=${id})`);
       }
     }
     // Platform operator: cross-tenant console principal (not pinned to a tenant).
