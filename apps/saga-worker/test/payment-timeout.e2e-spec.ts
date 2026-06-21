@@ -31,7 +31,7 @@ describe("saga-worker payment-timeout (e2e: customer never confirms)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 2 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 2, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
     const result = await handle.result(); // never signal confirm
     expect(result).toBe("CANCELLED_PAYMENT_TIMEOUT");

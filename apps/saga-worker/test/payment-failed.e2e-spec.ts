@@ -36,7 +36,7 @@ describe("saga-worker payment-failed (e2e: declined authorize)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: declineAmount, slaSeconds: 60, confirmSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: declineAmount, slaSeconds: 60, confirmSeconds: 60, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
     await handle.signal(confirmPaymentSignal);
     const result = await handle.result();

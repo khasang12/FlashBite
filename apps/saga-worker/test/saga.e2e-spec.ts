@@ -36,12 +36,14 @@ describe("saga-worker (e2e: live Temporal + Postgres)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
     await handle.signal(confirmPaymentSignal);
     await handle.signal(merchantApprovalSignal, true);
     const result = await handle.result();
-    expect(result).toBe("ACCEPTED");
+    // After accept the parent runs the dispatch child; with no seeded driver the child fails fast
+    // and the parent maps it to DISPATCH_FAILED. The order aggregate still records OrderAccepted.
+    expect(result).toBe("DISPATCH_FAILED");
 
     const events = await prisma.eventStore.findMany({
       where: { tenantId: "berlin", aggregateId: orderId },

@@ -48,7 +48,7 @@ describe("write-api merchant accept (e2e)", () => {
     await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
     const res = await request(app.getHttpServer())
       .post(`/orders/${orderId}/accept`)
@@ -66,7 +66,7 @@ describe("write-api merchant accept (e2e)", () => {
     const handle = await temporal.client.workflow.start("orderLifecycleWorkflow", {
       taskQueue: "order-lifecycle",
       workflowId: `berlin:${orderId}`,
-      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60 }],
+      args: [{ tenantId: "berlin", orderId, totalAmount: 1200, slaSeconds: 60, confirmSeconds: 60, offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300 }],
     });
 
     await request(app.getHttpServer()).post(`/orders/${orderId}/confirm-payment`).set("Authorization", `Bearer ${customer}`).expect(202);
@@ -79,7 +79,10 @@ describe("write-api merchant accept (e2e)", () => {
     expect(acceptStatus).toBe(202);
 
     const result = await handle.result();
-    expect(result).toBe("ACCEPTED");
+    // No driver seeded -> the dispatch child fails fast and the parent maps it to DISPATCH_FAILED.
+    // The accept itself (202 + OrderAccepted) is what this test asserts; the full DELIVERED path
+    // is covered by the standalone dispatch e2e.
+    expect(result).toBe("DISPATCH_FAILED");
 
     await prisma.outbox.deleteMany({ where: { partitionKey: `berlin:${orderId}` } });
     await prisma.eventStore.deleteMany({ where: { aggregateId: orderId } });
