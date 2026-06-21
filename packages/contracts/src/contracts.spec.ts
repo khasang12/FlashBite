@@ -43,17 +43,20 @@ describe("contracts constants", () => {
       TASK_QUEUE: "order-lifecycle",
       WORKFLOW_TYPE: "orderLifecycleWorkflow",
       MERCHANT_APPROVAL_SIGNAL: "merchantApproval",
+      CONFIRM_PAYMENT_SIGNAL: "confirmPayment",
     });
     expect(ORDER_SAGA_RESULTS).toEqual({
       ACCEPTED: "ACCEPTED",
       CANCELLED_SLA: "CANCELLED_SLA",
       CANCELLED_DECLINED: "CANCELLED_DECLINED",
       CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
+      CANCELLED_PAYMENT_TIMEOUT: "CANCELLED_PAYMENT_TIMEOUT",
     });
     expect(ORDER_CANCEL_REASONS).toEqual({
       SLA_BREACH: "SLA_BREACH",
       DECLINED: "DECLINED",
       PAYMENT_FAILED: "PAYMENT_FAILED",
+      PAYMENT_TIMEOUT: "PAYMENT_TIMEOUT",
     });
   });
 

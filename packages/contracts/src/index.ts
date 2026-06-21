@@ -128,6 +128,7 @@ export const ORDER_SAGA = {
   TASK_QUEUE: "order-lifecycle",
   WORKFLOW_TYPE: "orderLifecycleWorkflow",
   MERCHANT_APPROVAL_SIGNAL: "merchantApproval",
+  CONFIRM_PAYMENT_SIGNAL: "confirmPayment",
 } as const;
 
 /** Terminal results returned by the order-lifecycle workflow. */
@@ -136,6 +137,7 @@ export const ORDER_SAGA_RESULTS = {
   CANCELLED_SLA: "CANCELLED_SLA",
   CANCELLED_DECLINED: "CANCELLED_DECLINED",
   CANCELLED_PAYMENT_FAILED: "CANCELLED_PAYMENT_FAILED",
+  CANCELLED_PAYMENT_TIMEOUT: "CANCELLED_PAYMENT_TIMEOUT",
 } as const;
 
 /** Reason recorded on an OrderCancelled event. */
@@ -143,6 +145,7 @@ export const ORDER_CANCEL_REASONS = {
   SLA_BREACH: "SLA_BREACH",
   DECLINED: "DECLINED",
   PAYMENT_FAILED: "PAYMENT_FAILED",
+  PAYMENT_TIMEOUT: "PAYMENT_TIMEOUT",
 } as const;
 
 // ---- Auth ----
