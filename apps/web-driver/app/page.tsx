@@ -4,7 +4,7 @@ import {
   AuthGate, useAuthStore,
   type Tenant, type DispatchView,
   CITY_CENTERS, toNearbyRows,
-  DISPATCH_STATUS,
+  DISPATCH_STATUS, DISPATCH_OFFER_TIMEOUT_SECONDS,
   useDispatchStream,
   acceptDispatch, rejectDispatch, pickupOrder, deliverOrder,
 } from "@flashbite/web-shared";
@@ -28,9 +28,15 @@ function DriverDashboard() {
   const [dismissed, setDismissed] = useState<string | null>(null);
 
   const { dispatch } = useDispatchStream(driverId);
-  // An offer the driver hasn't dismissed (rejected/expired) locally.
+  // An offer for this driver that they haven't dismissed (rejected/expired) locally and whose
+  // offer window hasn't already lapsed — a snapshot can replay a stale OFFERED record whose
+  // workflow has long since moved on, which we must not present as a live offer.
   const offer: DispatchView | null =
-    dispatch && dispatch.status === DISPATCH_STATUS.OFFERED && dispatch.offeredDriverId === driverId && dispatch.orderId !== dismissed
+    dispatch &&
+    dispatch.status === DISPATCH_STATUS.OFFERED &&
+    dispatch.offeredDriverId === driverId &&
+    dispatch.orderId !== dismissed &&
+    Date.now() - Date.parse(dispatch.updatedAt) < DISPATCH_OFFER_TIMEOUT_SECONDS * 1000
       ? dispatch
       : null;
   const job: DispatchView | null =
