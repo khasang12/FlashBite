@@ -1,12 +1,12 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AuthGate, useAuthStore,
   type Tenant, type DispatchView,
   CITY_CENTERS, toNearbyRows,
   DISPATCH_STATUS, DISPATCH_OFFER_TIMEOUT_SECONDS,
   useDispatchStream,
-  acceptDispatch, rejectDispatch, pickupOrder, deliverOrder,
+  acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDriverOnline,
 } from "@flashbite/web-shared";
 import { useNearbyWatch } from "@/hooks/use-nearby-watch";
 import { NearbyMap } from "@/components/nearby-map";
@@ -26,6 +26,15 @@ function DriverDashboard() {
   const driverId = useAuthStore((s) => s.claims?.sub) ?? "";
   const [online, setOnline] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
+
+  // Reconcile the toggle from the backend on load — the driver may still be in the online set
+  // from a previous session even though this is a fresh page mount.
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+    getDriverOnline(driverId).then((o) => { if (!cancelled) setOnline(o); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [driverId]);
 
   const { dispatch } = useDispatchStream(driverId);
   // An offer for this driver that they haven't dismissed (rejected/expired) locally and whose

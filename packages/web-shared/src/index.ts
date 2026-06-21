@@ -51,7 +51,7 @@ export {
   placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
-  goOnline, goOffline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";

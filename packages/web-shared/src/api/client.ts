@@ -155,6 +155,13 @@ export async function goOffline(driverId: string): Promise<{ driverId: string; o
   return (await res.json()) as { driverId: string; online: boolean };
 }
 
+/** GET /drivers/:id/online — whether the driver is currently in the tenant online set (read-api). */
+export async function getDriverOnline(driverId: string): Promise<boolean> {
+  const res = await authedFetch(`/api/read/drivers/${encodeURIComponent(driverId)}/online`);
+  if (!res.ok) throw new Error(`getDriverOnline failed: ${res.status}`);
+  return ((await res.json()) as { online: boolean }).online;
+}
+
 /** POST /dispatch/:orderId/:action {driverId} — signal the dispatch child workflow (write-api). */
 async function signalDispatch(orderId: string, action: "accept" | "reject" | "pickup" | "deliver", driverId: string): Promise<void> {
   const res = await authedFetch(`/api/write/dispatch/${encodeURIComponent(orderId)}/${action}`, {

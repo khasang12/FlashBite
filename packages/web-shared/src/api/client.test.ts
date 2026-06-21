@@ -14,7 +14,7 @@ import {
   reportLocation,
   UnauthorizedError,
   type PlaceOrderRequest,
-  goOnline, goOffline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -236,6 +236,14 @@ describe("api client", () => {
     await goOffline("drv-1");
     expect(lastUrl()).toBe("/api/read/drivers/drv-1/offline");
     expect((lastCall()[1] as RequestInit).method).toBe("POST");
+  });
+
+  it("getDriverOnline GETs the read online endpoint and returns the boolean", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: true }), { status: 200 }));
+    expect(await getDriverOnline("drv-1")).toBe(true);
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/online");
+    expect((lastCall()[1] as RequestInit).method ?? "GET").toBe("GET");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
   });
 
   it("acceptDispatch POSTs the write dispatch accept with driverId body", async () => {
