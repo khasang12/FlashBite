@@ -95,6 +95,14 @@ export function declineOrder(orderId: string): Promise<void> {
   return signalOrder(orderId, "decline");
 }
 
+/** POST /orders/:id/confirm-payment — customer confirms; the saga then authorizes. */
+export async function confirmPayment(orderId: string): Promise<void> {
+  const res = await authedFetch(`/api/write/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`confirmPayment failed: ${res.status}`);
+}
+
 /**
  * POST /drivers/:id/location — telemetry ingest. Intentionally on the READ proxy:
  * the ingest endpoint is served by read-api (:3002), not write-api.

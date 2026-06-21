@@ -46,7 +46,7 @@ export {
 } from "./components/ui/carousel";
 
 export {
-  placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder,
+  placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
   UnauthorizedError,

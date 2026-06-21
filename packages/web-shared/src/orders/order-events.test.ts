@@ -61,6 +61,12 @@ describe("applyOrderEvent cancelReason", () => {
   });
 });
 
+describe("cancelReasonLabel PAYMENT_TIMEOUT", () => {
+  it("labels PAYMENT_TIMEOUT", () => {
+    expect(cancelReasonLabel("PAYMENT_TIMEOUT")).toBe("Payment not confirmed");
+  });
+});
+
 describe("paymentStatusLabel", () => {
   it("maps known statuses to customer-friendly wording", () => {
     expect(paymentStatusLabel("AUTHORIZED")).toBe("Authorized");

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "../store/auth-store";
 import {
   acceptOrder,
+  confirmPayment,
   declineOrder,
   fetchOrderPayment,
   getAdminDrivers,
@@ -194,6 +195,15 @@ describe("api client", () => {
   it("fetchOrderPayment passes through { status: null }", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
     expect(await fetchOrderPayment("o-2")).toEqual({ status: null });
+  });
+
+  it("confirmPayment POSTs the confirm signal with Bearer, no X-Tenant-ID", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await confirmPayment("o-1");
+    expect(lastUrl()).toBe("/api/write/orders/o-1/confirm-payment");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+    expect(lastHeaders()["X-Tenant-ID"]).toBeUndefined();
   });
 
   it("on 401, clears the session and throws UnauthorizedError", async () => {

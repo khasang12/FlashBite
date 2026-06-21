@@ -26,6 +26,7 @@ const CANCEL_REASON_LABELS: Record<string, string> = {
   SLA_BREACH: "SLA breach",
   DECLINED: "Declined by merchant",
   PAYMENT_FAILED: "Payment failed",
+  PAYMENT_TIMEOUT: "Payment not confirmed",
 };
 
 export function cancelReasonLabel(reason: string | undefined): string {
