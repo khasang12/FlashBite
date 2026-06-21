@@ -4,6 +4,7 @@ import { connectMongo, loadConfig } from "@flashbite/shared";
 import { CONSUMER_GROUPS, TOPICS } from "@flashbite/contracts";
 import { createRegistry, readEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { applyEvent } from "./projection";
+import { applyDispatchEvent } from "./dispatch-projection";
 
 export interface ConsumerHandle {
   stop: () => Promise<void>;
@@ -23,18 +24,37 @@ export async function runConsumer(consumer: Consumer, db: Db, registry: SchemaRe
   return { stop: async () => { await consumer.disconnect(); } };
 }
 
+/** Wires a kafkajs consumer to applyDispatchEvent for the dispatch-events topic. */
+export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: SchemaRegistry): Promise<ConsumerHandle> {
+  await consumer.connect();
+  await consumer.subscribe({ topic: TOPICS.DISPATCH_EVENTS, fromBeginning: false });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      const envelope = await readEnvelope(registry, message);
+      if (!envelope) return;
+      await applyDispatchEvent(db, envelope);
+    },
+  });
+  return { stop: async () => { await consumer.disconnect(); } };
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   const { client, db } = await connectMongo();
   const kafka = new Kafka({ clientId: "projection-worker", brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
-  const consumer = kafka.consumer({ groupId: CONSUMER_GROUPS.PROJECTION });
   const registry = createRegistry(config.schemaRegistryUrl);
+
+  const consumer = kafka.consumer({ groupId: CONSUMER_GROUPS.PROJECTION });
   const handle = await runConsumer(consumer, db, registry);
+
+  const dispatchConsumer = kafka.consumer({ groupId: CONSUMER_GROUPS.DISPATCH_PROJECTION });
+  const dispatchHandle = await runDispatchConsumer(dispatchConsumer, db, registry);
 
   // eslint-disable-next-line no-console
   console.log("projection-worker running");
   const shutdown = async (): Promise<void> => {
     await handle.stop();
+    await dispatchHandle.stop();
     await client.close();
     process.exit(0);
   };
