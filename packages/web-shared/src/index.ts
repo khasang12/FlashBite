@@ -70,6 +70,7 @@ export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";
 export { dispatchStatusLabel, deliveryStatusLabel, DISPATCH_OFFER_TIMEOUT_SECONDS } from "./dispatch/labels";
 export { useDispatchStream, parseDispatchData, reduceDispatch } from "./dispatch/use-dispatch-stream";
+export { useTenantDispatchStream, reduceDispatchMap, type DispatchMap } from "./dispatch/use-tenant-dispatch-stream";
 export { useOrderStream, parseStreamData } from "./orders/use-order-stream";
 export {
   Table,
