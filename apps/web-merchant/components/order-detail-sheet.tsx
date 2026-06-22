@@ -2,15 +2,18 @@
 import { useEffect, useState } from "react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, Button, StatusPill,
-  acceptOrder, declineOrder, cancelReasonLabel, fetchOrderPayment, ORDER_STATUS, type OrderView,
+  acceptOrder, declineOrder, cancelReasonLabel, fetchOrderPayment, ORDER_STATUS,
+  deliveryStatusLabel, getOrderDispatch,
+  type OrderView, type DispatchView,
 } from "@flashbite/web-shared";
 
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 
 export function OrderDetailSheet({
-  order, onClose,
+  order, dispatch, onClose,
 }: {
   order: OrderView | null;
+  dispatch: DispatchView | null;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -28,6 +31,18 @@ export function OrderDetailSheet({
       .catch(() => { if (active) setPaymentStatus(null); });
     return () => { active = false; };
   }, [order?.orderId]);
+
+  const [dispatchFallback, setDispatchFallback] = useState<DispatchView | null>(null);
+  useEffect(() => {
+    setDispatchFallback(null);
+    if (!order) return;
+    let active = true;
+    getOrderDispatch(order.orderId)
+      .then((d) => { if (active && "status" in d && d.status !== null) setDispatchFallback(d as DispatchView); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [order?.orderId]);
+  const delivery = dispatch ?? dispatchFallback;
 
   const act = async (fn: (id: string) => Promise<void>) => {
     if (!order) return;
@@ -70,6 +85,12 @@ export function OrderDetailSheet({
             <div className="mt-3 flex justify-between border-t pt-3 font-extrabold">
               <span>Total</span><span>{euro(order.totalAmount)}</span>
             </div>
+            {order.status === ORDER_STATUS.ACCEPTED && (
+              <div className="mt-3 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Delivery</span>
+                <span className="font-semibold">{delivery ? deliveryStatusLabel(delivery.status) : "Preparing…"}</span>
+              </div>
+            )}
             {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
             {order.status === ORDER_STATUS.PLACED && (
               paymentStatus === "AUTHORIZED" ? (
