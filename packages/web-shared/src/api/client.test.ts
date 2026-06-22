@@ -14,6 +14,7 @@ import {
   reportLocation,
   UnauthorizedError,
   type PlaceOrderRequest,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -219,5 +220,94 @@ describe("api client", () => {
     fetchMock.mockResolvedValue(new Response("", { status: 500 }));
     await expect(listOrders()).rejects.toThrow();
     expect(useAuthStore.getState().token).toBe("t"); // still logged in
+  });
+
+  it("goOnline POSTs the read online endpoint with Bearer", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: true }), { status: 202 }));
+    const res = await goOnline("drv-1");
+    expect(res).toEqual({ driverId: "drv-1", online: true });
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/online");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("goOffline POSTs the read offline endpoint", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: false }), { status: 202 }));
+    await goOffline("drv-1");
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/offline");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+  });
+
+  it("getDriverOnline GETs the read online endpoint and returns the boolean", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ driverId: "drv-1", online: true }), { status: 200 }));
+    expect(await getDriverOnline("drv-1")).toBe(true);
+    expect(lastUrl()).toBe("/api/read/drivers/drv-1/online");
+    expect((lastCall()[1] as RequestInit).method ?? "GET").toBe("GET");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("acceptDispatch POSTs the write dispatch accept with driverId body", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await acceptDispatch("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/accept");
+    expect((lastCall()[1] as RequestInit).method).toBe("POST");
+    expect(lastHeaders()["Content-Type"]).toBe("application/json");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ driverId: "drv-1" });
+  });
+
+  it("rejectDispatch POSTs the write dispatch reject", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await rejectDispatch("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/reject");
+    expect(JSON.parse((lastCall()[1] as RequestInit).body as string)).toEqual({ driverId: "drv-1" });
+  });
+
+  it("pickupOrder POSTs the write dispatch pickup", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await pickupOrder("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/pickup");
+  });
+
+  it("deliverOrder POSTs the write dispatch deliver", async () => {
+    fetchMock.mockResolvedValue(new Response("{}", { status: 202 }));
+    await deliverOrder("o-1", "drv-1");
+    expect(lastUrl()).toBe("/api/write/dispatch/o-1/deliver");
+  });
+
+  it("getDispatchForDriver GETs the driver dispatch read with driverId query", async () => {
+    const view = { tenantId: "berlin", orderId: "o-1", status: "OFFERED", offeredDriverId: "drv-1", version: 1, updatedAt: "t" };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
+    const res = await getDispatchForDriver("drv-1");
+    expect(res).toEqual(view);
+    expect(lastUrl()).toBe("/api/read/driver/dispatch?driverId=drv-1");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getDispatchForDriver passes through { status: null }", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
+    expect(await getDispatchForDriver("drv-1")).toEqual({ status: null });
+  });
+
+  it("getMerchantDispatches GETs the tenant dispatch snapshot with Bearer", async () => {
+    const rows = [{ tenantId: "berlin", orderId: "o-1", status: "DISPATCHED", version: 2, updatedAt: "t" }];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+    const res = await getMerchantDispatches();
+    expect(res).toEqual(rows);
+    expect(lastUrl()).toBe("/api/read/merchant/dispatch");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getOrderDispatch GETs the order dispatch read with Bearer", async () => {
+    const view = { tenantId: "berlin", orderId: "o-1", status: "DISPATCHED", driverId: "drv-1", version: 2, updatedAt: "t" };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
+    const res = await getOrderDispatch("o-1");
+    expect(res).toEqual(view);
+    expect(lastUrl()).toBe("/api/read/orders/o-1/dispatch");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getOrderDispatch passes through { status: null }", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
+    expect(await getOrderDispatch("o-2")).toEqual({ status: null });
   });
 });

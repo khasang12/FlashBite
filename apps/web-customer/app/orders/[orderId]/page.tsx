@@ -6,6 +6,9 @@ import {
   confirmPayment,
   paymentStatusLabel,
   cancelReasonLabel,
+  getOrderDispatch,
+  deliveryStatusLabel,
+  DISPATCH_STATUS,
   StatusPill,
   Card,
   CardContent,
@@ -14,6 +17,7 @@ import {
   AuthGate,
   ORDER_STATUS,
   type OrderView,
+  type DispatchView,
 } from "@flashbite/web-shared";
 import { Header } from "@/components/header";
 
@@ -50,6 +54,7 @@ function OrderTrackingContent({
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [dispatch, setDispatch] = useState<DispatchView | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -73,7 +78,19 @@ function OrderTrackingContent({
         setWaiting(false);
         const p = await fetchOrderPayment(orderId).catch(() => null);
         if (active && p) setPaymentStatus(p.status);
-        if (TERMINAL.includes(o.status)) return; // resolved — stop polling
+        let nextDispatch = dispatch;
+        if (o.status === ORDER_STATUS.ACCEPTED) {
+          const d = await getOrderDispatch(orderId).catch(() => null);
+          if (active && d && "status" in d && d.status !== null) {
+            nextDispatch = d as DispatchView;
+            setDispatch(nextDispatch);
+          }
+        }
+        // Stop on cancellation, or once an accepted order's delivery has finished.
+        const deliveryTerminal =
+          nextDispatch?.status === DISPATCH_STATUS.DELIVERED || nextDispatch?.status === DISPATCH_STATUS.FAILED;
+        if (o.status === ORDER_STATUS.CANCELLED) return;
+        if (o.status === ORDER_STATUS.ACCEPTED && deliveryTerminal) return;
       } else {
         misses += 1;
         if (misses > 5) setWaiting(false);
@@ -144,6 +161,14 @@ function OrderTrackingContent({
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Payment</span>
                     <span className="font-semibold">{paymentStatusLabel(paymentStatus)}</span>
+                  </div>
+                )}
+                {order.status === ORDER_STATUS.ACCEPTED && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Delivery</span>
+                    <span className="font-semibold">
+                      {dispatch ? deliveryStatusLabel(dispatch.status) : "Preparing…"}
+                    </span>
                   </div>
                 )}
                 {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (

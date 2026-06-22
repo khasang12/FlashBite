@@ -13,16 +13,16 @@
 #
 # Usage:
 #   ./scripts/stream-gps.sh                 # drv-1 @ berlin, 1s interval
-#   DRIVER=drv-7 TENANT=tokyo ./scripts/stream-gps.sh
+#   DRIVER=drv-2 TENANT=tokyo ./scripts/stream-gps.sh   # drivers are seeded drv-1..drv-4
 #   INTERVAL=0.5 STEP=0.002 ./scripts/stream-gps.sh
 #
 # Env vars (all optional):
 #   BASE_URL      read-api base URL            (default http://localhost:3002)
 #   IDENTITY_URL  identity service base URL    (default http://localhost:3003)
 #   TENANT        tenant slug (used to build DRIVER_EMAIL)  (default berlin)
-#   DRIVER_EMAIL  login email for the driver   (default driver@${TENANT}.test)
-#   SEED_PASSWORD password for the driver user (default devpassword)
 #   DRIVER        driver id in the path        (default drv-1)
+#   DRIVER_EMAIL  login email for the driver   (default ${DRIVER}@${TENANT}.test — sub == driverId)
+#   SEED_PASSWORD password for the driver user (default devpassword)
 #   INTERVAL      seconds between pings         (default 1)
 #   LNG / LAT     starting coordinates         (default Berlin centre 13.405 / 52.52)
 #   STEP          max coord delta per tick      (default 0.0008 ~= up to ~60-90m)
@@ -38,9 +38,11 @@ set -u
 BASE_URL="${BASE_URL:-http://localhost:3002}"
 TENANT="${TENANT:-berlin}"
 IDENTITY_URL="${IDENTITY_URL:-http://localhost:3003}"
-DRIVER_EMAIL="${DRIVER_EMAIL:-driver@${TENANT}.test}"
-SEED_PASSWORD="${SEED_PASSWORD:-devpassword}"
 DRIVER="${DRIVER:-drv-1}"
+# Drivers are seeded drv-1..drv-4 with User.id == sub == driverId, so log in *as* the
+# streamed driver (berlin keeps clean ids; other tenants are suffixed, e.g. drv-1-tokyo).
+DRIVER_EMAIL="${DRIVER_EMAIL:-${DRIVER}@${TENANT}.test}"
+SEED_PASSWORD="${SEED_PASSWORD:-devpassword}"
 INTERVAL="${INTERVAL:-1}"
 LNG="${LNG:-13.405}"
 LAT="${LAT:-52.52}"

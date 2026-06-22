@@ -4,6 +4,7 @@ import {
   listOrders, getOrder, useOrderStream, applyOrderEvent, upsertOrder,
   statusFromEventType, useAuthStore, Input, ORDER_STATUS, AuthGate,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  useTenantDispatchStream,
   type OrderView, type OrderStreamEvent,
 } from "@flashbite/web-shared";
 import { OrdersTable } from "@/components/orders-table";
@@ -50,6 +51,7 @@ function MerchantDashboard() {
   }, []);
 
   useOrderStream(onEvent, resync);
+  const { dispatches } = useTenantDispatchStream();
 
   const current = selected ? orders.find((o) => o.orderId === selected.orderId) ?? selected : null;
   const visible = status === "ALL" ? orders : orders.filter((o) => o.status === status);
@@ -75,9 +77,9 @@ function MerchantDashboard() {
             </SelectContent>
           </Select>
         </div>
-        <OrdersTable data={visible} globalFilter={filter} onRowClick={setSelected} />
+        <OrdersTable data={visible} globalFilter={filter} dispatches={dispatches} onRowClick={setSelected} />
       </main>
-      <OrderDetailSheet order={current} onClose={() => setSelected(null)} />
+      <OrderDetailSheet order={current} dispatch={current ? dispatches[current.orderId] ?? null : null} onClose={() => setSelected(null)} />
     </div>
   );
 }

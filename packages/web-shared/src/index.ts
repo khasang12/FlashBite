@@ -1,6 +1,8 @@
 // Re-export the order contracts the frontends consume.
 export type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contracts";
 export { ORDER_STATUS } from "@flashbite/contracts";
+export { DISPATCH_STATUS } from "@flashbite/contracts";
+export type { DispatchView, DispatchStatus } from "@flashbite/contracts";
 
 // Design-system primitives (shadcn/ui, new-york).
 export { cn } from "./lib/utils";
@@ -49,6 +51,7 @@ export {
   placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches,
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
 } from "./api/client";
@@ -65,6 +68,9 @@ export { toNearbyRows, formatKm } from "./geo/nearby";
 export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
 export { StatusPill } from "./components/status-pill";
+export { dispatchStatusLabel, deliveryStatusLabel, DISPATCH_OFFER_TIMEOUT_SECONDS } from "./dispatch/labels";
+export { useDispatchStream, parseDispatchData, reduceDispatch } from "./dispatch/use-dispatch-stream";
+export { useTenantDispatchStream, reduceDispatchMap, type DispatchMap } from "./dispatch/use-tenant-dispatch-stream";
 export { useOrderStream, parseStreamData } from "./orders/use-order-stream";
 export {
   Table,
