@@ -185,6 +185,14 @@ export function deliverOrder(orderId: string, driverId: string): Promise<void> {
   return signalDispatch(orderId, "deliver", driverId);
 }
 
+/** GET /orders/:orderId/dispatch — the order's current delivery (dispatch) state, for
+ *  customer + merchant views. `status` is null when no dispatch exists yet. */
+export async function getOrderDispatch(orderId: string): Promise<DispatchView | { status: null }> {
+  const res = await authedFetch(`/api/read/orders/${encodeURIComponent(orderId)}/dispatch`);
+  if (!res.ok) throw new Error(`getOrderDispatch failed: ${res.status}`);
+  return (await res.json()) as DispatchView | { status: null };
+}
+
 /** GET /driver/dispatch?driverId=... — the driver's current offer/active job (read-api). */
 export async function getDispatchForDriver(driverId: string): Promise<DispatchView | { status: null }> {
   const qs = new URLSearchParams({ driverId });

@@ -14,7 +14,7 @@ import {
   reportLocation,
   UnauthorizedError,
   type PlaceOrderRequest,
-  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -286,5 +286,19 @@ describe("api client", () => {
   it("getDispatchForDriver passes through { status: null }", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
     expect(await getDispatchForDriver("drv-1")).toEqual({ status: null });
+  });
+
+  it("getOrderDispatch GETs the order dispatch read with Bearer", async () => {
+    const view = { tenantId: "berlin", orderId: "o-1", status: "DISPATCHED", driverId: "drv-1", version: 2, updatedAt: "t" };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(view), { status: 200 }));
+    const res = await getOrderDispatch("o-1");
+    expect(res).toEqual(view);
+    expect(lastUrl()).toBe("/api/read/orders/o-1/dispatch");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getOrderDispatch passes through { status: null }", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
+    expect(await getOrderDispatch("o-2")).toEqual({ status: null });
   });
 });
