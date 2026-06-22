@@ -310,4 +310,40 @@ describe("api client", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
     expect(await getOrderDispatch("o-2")).toEqual({ status: null });
   });
+
+  it("refreshes once on 401, then retries the original request with the new token", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))                                         // original
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: "new-token" }), { status: 200 })) // refresh
+      .mockResolvedValueOnce(new Response(JSON.stringify({ orderId: "o-1" }), { status: 200 }));         // retry
+    const res = await placeOrder({ orderId: "o-1", customerId: "a", items: [], totalAmount: 0 });
+    expect(res).toEqual({ orderId: "o-1" });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/identity/auth/refresh");
+    expect((fetchMock.mock.calls[1][1] as RequestInit).credentials).toBe("include");
+    const retryHeaders = ((fetchMock.mock.calls[2][1] as RequestInit).headers ?? {}) as Record<string, string>;
+    expect(retryHeaders.Authorization).toBe("Bearer new-token");
+  });
+
+  it("logs out and throws when the refresh also fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))   // original
+      .mockResolvedValueOnce(new Response("", { status: 401 }));  // refresh fails
+    await expect(getOrder("o-1")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(useAuthStore.getState().token).toBeNull();
+  });
+
+  it("single-flights concurrent 401s into one refresh", async () => {
+    let refreshCalls = 0;
+    const failedOnce = new Set<string>();
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/identity/auth/refresh") {
+        refreshCalls += 1;
+        return Promise.resolve(new Response(JSON.stringify({ accessToken: "new-token" }), { status: 200 }));
+      }
+      if (!failedOnce.has(url)) { failedOnce.add(url); return Promise.resolve(new Response("", { status: 401 })); }
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    });
+    await Promise.all([getOrder("o-1"), listOrders()]);
+    expect(refreshCalls).toBe(1);
+  });
 });
