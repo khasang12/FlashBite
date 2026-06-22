@@ -96,8 +96,10 @@ function OrderTrackingContent({
         const enRoute =
           nextDispatch?.status === DISPATCH_STATUS.DISPATCHED || nextDispatch?.status === DISPATCH_STATUS.PICKED_UP;
         if (enRoute) {
-          const loc = await getOrderDriverLocation(orderId).catch(() => null);
-          if (active) setDriverLocation(loc);
+          // A swallowed fetch error -> undefined -> keep the last known position (no flicker).
+          // A legitimate server null (no ping yet) still clears the marker.
+          const loc = await getOrderDriverLocation(orderId).catch(() => undefined);
+          if (active && loc !== undefined) setDriverLocation(loc);
         } else if (active) {
           setDriverLocation(null);
         }
