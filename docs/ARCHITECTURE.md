@@ -101,7 +101,7 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 |---|---|---|---|
 | `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
 | `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal; relay driver dispatch commands (`POST /dispatch/:orderId/{accept,reject,pickup,deliver}`) as signals to the dispatch child workflow. `@Roles` gates: `customer` places, `merchant` accepts/declines, `driver` acts on dispatch. |
-| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch SSE `GET /merchant/dispatch/stream`; telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
+| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch snapshot `GET /merchant/dispatch` + live SSE `GET /merchant/dispatch/stream` (both driver-identity-stripped); telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
@@ -271,9 +271,13 @@ flowchart LR
 - **Delivery status on customer + merchant (Phase 3d-iv):** the customer tracking page polls
   `GET /orders/:orderId/dispatch` and shows a delivery line (Finding a driver -> Driver assigned ->
   Out for delivery -> Delivered / Delivery unavailable); the merchant orders table + detail sheet show
-  the same, live, via a tenant-wide `GET /merchant/dispatch/stream` SSE (the existing
-  `DispatchStreamService`, no per-driver filter). Outward-facing labels (`deliveryStatusLabel`); no
-  driver identity is surfaced.
+  the same, live. The merchant **seeds** every order's current delivery state from a tenant snapshot
+  `GET /merchant/dispatch` on load, then merges live updates from the tenant-wide
+  `GET /merchant/dispatch/stream` SSE (the existing `DispatchStreamService`, no per-driver filter) —
+  the SSE carries only live events, so the snapshot is what populates already-dispatched orders.
+  Both non-driver reads are projected to a `DeliveryView` that **strips driver identity** server-side
+  (`driverId`/`offeredDriverId` never reach the customer/merchant wire); the driver's own SSE keeps it.
+  Outward-facing labels (`deliveryStatusLabel`), distinct from the driver-facing `dispatchStatusLabel`.
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
