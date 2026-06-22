@@ -1,0 +1,24 @@
+const READ_API = process.env.READ_API_ORIGIN ?? "http://localhost:3002";
+
+// Stream the merchant dispatch SSE feed through a Route Handler instead of next.config
+// rewrites: rewrites buffer the proxied response, so fetch-based EventSource
+// clients never receive incremental events. A Route Handler returning the
+// upstream ReadableStream body streams it through. Same-origin, no CORS.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export async function GET(request: Request): Promise<Response> {
+  const auth = request.headers.get("authorization");
+  const upstream = await fetch(`${READ_API}/merchant/dispatch/stream`, {
+    headers: { ...(auth ? { Authorization: auth } : {}), Accept: "text/event-stream" },
+    signal: request.signal,
+  });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}

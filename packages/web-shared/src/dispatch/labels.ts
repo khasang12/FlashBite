@@ -17,3 +17,17 @@ const LABELS: Record<string, string> = {
 export function dispatchStatusLabel(status: string): string {
   return LABELS[status] ?? status;
 }
+
+const DELIVERY_LABELS: Record<string, string> = {
+  [DISPATCH_STATUS.OFFERED]: "Finding a driver",
+  [DISPATCH_STATUS.DISPATCHED]: "Driver assigned",
+  [DISPATCH_STATUS.PICKED_UP]: "Out for delivery",
+  [DISPATCH_STATUS.DELIVERED]: "Delivered",
+  [DISPATCH_STATUS.FAILED]: "Delivery unavailable",
+};
+
+/** Customer/merchant-facing label for a delivery (dispatch) status; unknown values pass through.
+ *  Distinct from the driver-facing dispatchStatusLabel (which is phrased as driver actions). */
+export function deliveryStatusLabel(status: string): string {
+  return DELIVERY_LABELS[status] ?? status;
+}

@@ -84,6 +84,11 @@ flowchart LR
   app goes online/offline and receives offers over a **per-driver-filtered SSE stream**
   (`GET /driver/dispatch/stream`), accepting → pickup → deliver; `driverId` is the JWT `sub` (drivers
   seeded `drv-1..drv-4`, so identity == dispatch id).
+- **Delivery tracking for customer + merchant (Phase 3d-iv)** — the customer order page shows a live
+  delivery line (Finding a driver → Driver assigned → Out for delivery → Delivered), and the merchant
+  dashboard shows a live **Delivery** column + detail line (seeded from a `GET /merchant/dispatch`
+  snapshot, then a tenant-wide dispatch SSE). Outward-facing labels; driver identity is stripped
+  server-side so it never reaches the customer/merchant wire.
 - **Polyglot persistence** — Postgres (event store), Mongo (read models + inbox), Redis Cluster
   (cache + geo, `tenant:{id}` hash-tag co-location).
 - **Real-time telemetry** — ephemeral driver GPS (`DriverTelemetryStreamed` on `telemetry-streams`)
@@ -153,7 +158,7 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **3a** | Event-sourced Order aggregate (full ES, optimistic concurrency) | ✅ complete |
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
 | **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
-| **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) | ✅ complete |
+| **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) + delivery tracking on customer/merchant | ✅ complete |
 | 3 (remaining) | Customer live driver-location tracking (3d-iii), real Stripe (refund/webhook/read-model) | planned |
 | 4 | Frontend polish + observability story | planned |
 

@@ -7,10 +7,11 @@ import { DispatchStreamService } from "./dispatch-stream.service";
 import { SseFeederService } from "./sse-feeder.service";
 import { MerchantSseController } from "./merchant-sse.controller";
 import { DriverSseController } from "./driver-sse.controller";
+import { MerchantDispatchSseController } from "./merchant-dispatch-sse.controller";
 import { DispatchQueryService } from "../dispatch/dispatch-query.service";
 
 @Module({
-  controllers: [MerchantSseController, DriverSseController],
+  controllers: [MerchantSseController, DriverSseController, MerchantDispatchSseController],
   providers: [
     OrderStreamService,
     DispatchStreamService,
