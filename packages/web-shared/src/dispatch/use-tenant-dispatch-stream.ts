@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import type { DispatchView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
+import { getMerchantDispatches } from "../api/client";
 import { parseDispatchData, reduceDispatch } from "./use-dispatch-stream";
 
 export type DispatchMap = Record<string, DispatchView>;
@@ -24,6 +25,13 @@ export function useTenantDispatchStream(): { dispatches: DispatchMap; connected:
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
+    // Seed every order's current delivery state on load — the SSE only carries *live* updates, so
+    // without this the column is empty for existing orders until the next dispatch event. Live
+    // events merge on top (version-reconciled), so a newer streamed update is never clobbered.
+    void getMerchantDispatches()
+      .then((list) => { if (!cancelled) setDispatches((prev) => list.reduce(reduceDispatchMap, prev)); })
+      .catch(() => undefined);
     const ctrl = new AbortController();
     void fetchEventSource("/api/read/merchant/dispatch/stream", {
       headers: { Authorization: `Bearer ${token}` },
@@ -43,7 +51,7 @@ export function useTenantDispatchStream(): { dispatches: DispatchMap; connected:
       },
       onerror: () => { setConnected(false); /* let fetchEventSource retry */ },
     }).catch(() => { /* aborted on unmount */ });
-    return () => { ctrl.abort(); setConnected(false); };
+    return () => { cancelled = true; ctrl.abort(); setConnected(false); };
   }, [token]);
 
   return { dispatches, connected };

@@ -11,6 +11,12 @@ export class DispatchQueryService {
     return (doc as unknown as DispatchView) ?? null;
   }
 
+  /** Every order's current dispatch state for the tenant — the merchant snapshot seed. */
+  async allForTenant(tenantId: string): Promise<DispatchView[]> {
+    const docs = await this.mongo.db.collection(READ_COLLECTIONS.DISPATCHES).find({ tenantId }).toArray();
+    return docs as unknown as DispatchView[];
+  }
+
   async forDriver(tenantId: string, driverId: string): Promise<DispatchView | null> {
     const doc = await this.mongo.db.collection(READ_COLLECTIONS.DISPATCHES).findOne({
       tenantId,

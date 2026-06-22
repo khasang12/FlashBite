@@ -185,6 +185,14 @@ export function deliverOrder(orderId: string, driverId: string): Promise<void> {
   return signalDispatch(orderId, "deliver", driverId);
 }
 
+/** GET /merchant/dispatch — snapshot of every order's current delivery state for the tenant
+ *  (driver identity stripped). Seeds the merchant dispatch map before the live SSE takes over. */
+export async function getMerchantDispatches(): Promise<DispatchView[]> {
+  const res = await authedFetch("/api/read/merchant/dispatch");
+  if (!res.ok) throw new Error(`getMerchantDispatches failed: ${res.status}`);
+  return (await res.json()) as DispatchView[];
+}
+
 /** GET /orders/:orderId/dispatch — the order's current delivery (dispatch) state, for
  *  customer + merchant views. `status` is null when no dispatch exists yet. */
 export async function getOrderDispatch(orderId: string): Promise<DispatchView | { status: null }> {
