@@ -1,4 +1,4 @@
-# FlashBite — identity service HTTP examples (AT/RT hardening)
+# FlashBite - identity service HTTP examples (AT/RT hardening)
 # Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
 #
 # Prereqs:
@@ -26,6 +26,6 @@ POST {{identityUrl}}/auth/refresh
 ### Logout (revokes the refresh token)
 POST {{identityUrl}}/auth/logout
 
-### JWKS — public keys used to verify access tokens. Expect 200 { "keys": [ ... ] }
+### JWKS - public keys used to verify access tokens. Expect 200 { "keys": [ ... ] }
 # Current + previous kid are both published so in-flight ATs survive a key rotation.
 GET {{identityUrl}}/.well-known/jwks.json
