@@ -4,11 +4,12 @@ import { DataTable, StatusPill, deliveryStatusLabel, type ColumnDef, type OrderV
 const euro = (cents: number) => `€${(cents / 100).toFixed(2)}`;
 const shortId = (id: string) => `#${id.slice(0, 8)}`;
 const itemsSummary = (o: OrderView) => (o.items ?? []).map((i) => `${i.sku} ×${i.qty}`).join(", ");
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const when = (iso: string) =>
+  new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 function buildColumns(dispatches: DispatchMap): ColumnDef<OrderView>[] {
   return [
-    { id: "time", accessorKey: "updatedAt", header: "Time", cell: ({ row }) => <span className="text-muted-foreground">{hhmm(row.original.updatedAt)}</span> },
+    { id: "time", accessorKey: "updatedAt", header: "Time", cell: ({ row }) => <span className="text-muted-foreground">{when(row.original.updatedAt)}</span> },
     { id: "order", accessorKey: "orderId", header: "Order", cell: ({ row }) => <span className="font-semibold">{shortId(row.original.orderId)}</span> },
     { id: "customer", accessorKey: "customerId", header: "Customer" },
     { id: "items", header: "Items", cell: ({ row }) => <span className="text-muted-foreground">{itemsSummary(row.original)}</span> },
