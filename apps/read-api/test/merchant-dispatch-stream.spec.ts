@@ -20,6 +20,11 @@ describe("MerchantDispatchSseController", () => {
     svc.publish("berlin", view({ status: "DISPATCHED", driverId: "drv-1", version: 2 }));
     const got = await collected;
     expect(got.map((m) => (m.data as DispatchView).status)).toEqual(["OFFERED", "DISPATCHED"]);
+    // driver identity must be stripped from the merchant-facing shape
+    expect((got[0].data as Record<string, unknown>).driverId).toBeUndefined();
+    expect((got[0].data as Record<string, unknown>).offeredDriverId).toBeUndefined();
+    expect((got[1].data as Record<string, unknown>).driverId).toBeUndefined();
+    expect((got[1].data as Record<string, unknown>).offeredDriverId).toBeUndefined();
   });
 
   it("does not stream another tenant's dispatch views", async () => {

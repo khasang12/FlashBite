@@ -56,12 +56,15 @@ describe("read-api dispatch (e2e)", () => {
     await app.close();
   });
 
-  it("GET /orders/:orderId/dispatch returns dispatch for tenant (berlin)", async () => {
+  it("GET /orders/:orderId/dispatch returns dispatch for tenant (berlin) WITHOUT driver identity", async () => {
     const res = await request(app.getHttpServer())
       .get(`/orders/${orderId}/dispatch`)
       .set("Authorization", `Bearer ${berlinDriverToken}`);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: "DISPATCHED", driverId });
+    expect(res.body).toMatchObject({ status: "DISPATCHED" });
+    // driver identity must be stripped at the customer/merchant-facing read boundary
+    expect(res.body.driverId).toBeUndefined();
+    expect(res.body.offeredDriverId).toBeUndefined();
   });
 
   it("GET /orders/:orderId/dispatch returns {status:null} for different tenant (tokyo isolation)", async () => {
