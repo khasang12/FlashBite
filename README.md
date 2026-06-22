@@ -100,6 +100,7 @@ flowchart LR
   access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
   `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is
   **gone** — isolation rests on cryptographic identity, not a client-supplied header.
+- **Identity hardening: short-lived access tokens + rotating httpOnly refresh-token cookies, persisted+rotatable signing key.**
 - **Postgres Row-Level Security (Phase 2)** — the write plane (`event_store` + `outbox`) is RLS-
   enforced: write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
   set `app.tenant_id` per transaction, so a tenant can never read or write another's rows even if
@@ -114,7 +115,7 @@ flowchart LR
 - **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
   tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
 
-**Planned (later phases):** customer live driver-location tracking (3d-iii), real Stripe integration (refund / webhook settlement / payment read model). Identity hardening (refresh tokens, key rotation) and server-deriving the dispatch `driverId` from the JWT `sub` are backlogged. See `docs/superpowers/backlog.md`.
+**Planned (later phases):** real Stripe integration (refund / webhook settlement / payment read model). Server-deriving the dispatch `driverId` from the JWT `sub` is backlogged. See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in

@@ -439,6 +439,15 @@ sequenceDiagram
   and runs the request inside an `AsyncLocalStorage` scope of `{tenantId, role, sub}`. There is **no
   `X-Tenant-ID` fallback** — a missing/invalid token is `401`. Mutations are gated by `@Roles`
   (`customer` places, `merchant` accepts/declines, `operator` for `/admin/*`).
+- **Access + refresh tokens (identity hardening):** login returns a short-lived RS256 access
+  token (JWT_ACCESS_TTL=900s, body `{accessToken,tokenType,expiresIn}`) plus a server-tracked,
+  rotating refresh token delivered ONLY as an httpOnly SameSite=Strict cookie (`fb_rt`, sha-256
+  hashed at rest, never returned in a body). `POST /auth/refresh` rotates the RT (one-time-use;
+  reusing a rotated/revoked RT revokes the whole token family) and mints a fresh AT; `POST
+  /auth/logout` revokes it. web-shared `authedFetch` silently refreshes once on a 401 (single
+  flight) and retries. The RSA signing key is persisted in `signing_keys`; JWKS publishes
+  current+previous so a deliberate rotation never breaks in-flight access tokens. Resource-server
+  token verification is unchanged (JWKS resolves multiple kids).
 - **Postgres Row-Level Security (write plane):** `event_store` + `outbox` have RLS enabled +
   forced; write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
   set `app.tenant_id` as the first statement of each write transaction (`withTenantTransaction`), so

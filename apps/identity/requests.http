@@ -1,0 +1,31 @@
+# FlashBite — identity service HTTP examples (AT/RT hardening)
+# Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
+#
+# Prereqs:
+#   pnpm dev:identity      # http://localhost:3003
+#   pnpm seed:users        # seed demo users (role@tenant.test)
+
+@identityUrl = http://localhost:3003
+
+### Identity health. Expect 200 { "status": "ok" }.
+GET {{identityUrl}}/health
+
+### Log in as a berlin merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 900 }.
+# @name login
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "merchant@berlin.test",
+  "password": "devpassword"
+}
+
+### Refresh the access token (sends the fb_rt cookie set by login)
+POST {{identityUrl}}/auth/refresh
+
+### Logout (revokes the refresh token)
+POST {{identityUrl}}/auth/logout
+
+### JWKS — public keys used to verify access tokens. Expect 200 { "keys": [ ... ] }
+# Current + previous kid are both published so in-flight ATs survive a key rotation.
+GET {{identityUrl}}/.well-known/jwks.json
