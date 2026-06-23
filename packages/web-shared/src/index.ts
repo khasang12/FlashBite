@@ -109,3 +109,4 @@ export {
 export { useAuthStore, type AuthClaims } from "./store/auth-store";
 export { LoginForm, type DemoUser } from "./components/login-form";
 export { AuthGate } from "./components/auth-gate";
+export { useTenants } from "./tenants/use-tenants";
