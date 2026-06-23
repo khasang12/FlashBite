@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { connectTemporal, RedisService, TemporalHandle } from "@flashbite/shared";
-import { CITY_CENTERS, driverGeoKey, driverOnlineKey, driverBusyKey, dispatchAggregateId } from "@flashbite/contracts";
+import { driverGeoKey, driverOnlineKey, driverBusyKey, dispatchAggregateId } from "@flashbite/contracts";
+
+const BERLIN_CENTER = { lng: 13.405, lat: 52.52 };
 import { startSagaWorker, SagaWorkerHandle } from "../src/main";
 import {
   driverDispatchWorkflow, dispatchAcceptSignal, dispatchPickupSignal, dispatchDeliverSignal,
@@ -28,7 +30,7 @@ describe("driver dispatch (e2e: live Temporal + Postgres + Redis)", () => {
   it("offered driver accepts -> pickup -> deliver records the full dispatch stream", async () => {
     const driverId = `drv-${randomUUID().slice(0, 8)}`;
     const orderId = randomUUID();
-    const c = CITY_CENTERS.berlin;
+    const c = BERLIN_CENTER;
     await redis.cluster.geoadd(driverGeoKey("berlin"), c.lng, c.lat, driverId);
     await redis.cluster.sadd(driverOnlineKey("berlin"), driverId);
 

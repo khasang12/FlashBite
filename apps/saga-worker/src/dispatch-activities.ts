@@ -3,15 +3,18 @@ import type { Cluster } from "ioredis";
 import {
   loadAggregate, appendWithExpectedVersion,
   foldDispatch, offer, acceptOffer, pickup, deliver, fail, INITIAL_DISPATCH_STATE, InvalidTransitionError,
+  TenantCatalogService,
   type DispatchState,
 } from "@flashbite/shared";
 import {
-  AGGREGATE_TYPES, EVENT_TYPES, TOPICS, CITY_CENTERS,
-  dispatchAggregateId, driverGeoKey, driverOnlineKey, driverBusyKey, type Tenant,
+  AGGREGATE_TYPES, EVENT_TYPES, TOPICS,
+  dispatchAggregateId, driverGeoKey, driverOnlineKey, driverBusyKey,
 } from "@flashbite/contracts";
 
 /** Dispatch activities — Redis-backed selection/busy + event-sourced appends to the dispatch stream. */
 export function createDispatchActivities(prisma: PrismaClient, redis: Cluster) {
+  const catalog = new TenantCatalogService(prisma);
+
   async function append(
     tenantId: string,
     orderId: string,
@@ -35,8 +38,8 @@ export function createDispatchActivities(prisma: PrismaClient, redis: Cluster) {
 
   return {
     async selectNearestAvailableDriverActivity(tenantId: string, exclude: string[]): Promise<string | null> {
-      const center = CITY_CENTERS[tenantId as Tenant];
-      if (!center) return null;
+      const center = await catalog.get(tenantId);
+      if (!center) return null; // unknown tenant -> no driver to offer
       const rows = (await redis.geosearch(
         driverGeoKey(tenantId), "FROMLONLAT", String(center.lng), String(center.lat),
         "BYRADIUS", "50", "km", "ASC",
