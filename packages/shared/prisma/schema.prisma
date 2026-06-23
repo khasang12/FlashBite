@@ -59,3 +59,13 @@ model User {
   @@index([tenantId])
   @@map("users")
 }
+
+model Tenant {
+  slug        String   @id
+  displayName String   @map("display_name")
+  lng         Float
+  lat         Float
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  @@map("tenants")
+}

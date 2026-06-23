@@ -228,6 +228,14 @@ export interface GeoPoint {
   lat: number;
 }
 
+export interface TenantView {
+  slug: string;
+  displayName: string;
+  lng: number;
+  lat: number;
+  status: string;
+}
+
 export const CITY_CENTERS: Record<Tenant, GeoPoint> = {
   berlin: { lng: 13.405, lat: 52.52 },
   tokyo: { lng: 139.7, lat: 35.68 },
