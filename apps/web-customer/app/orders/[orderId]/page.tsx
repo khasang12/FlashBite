@@ -16,10 +16,15 @@ import {
   Button,
   AuthGate,
   ORDER_STATUS,
+  getOrderDriverLocation,
+  CITY_CENTERS,
+  useAuthStore,
   type OrderView,
   type DispatchView,
+  type Tenant,
 } from "@flashbite/web-shared";
 import { Header } from "@/components/header";
+import { DriverMap } from "@/components/driver-map";
 
 const CUSTOMER_DEMOS = [
   { label: "Berlin customer", email: "customer@berlin.test" },
@@ -57,6 +62,8 @@ function OrderTrackingContent({
   const [dispatch, setDispatch] = useState<DispatchView | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const tenantId = (useAuthStore((s) => s.claims?.tenantId) ?? "berlin") as Tenant;
+  const [driverLocation, setDriverLocation] = useState<{ lng: number; lat: number } | null>(null);
 
   useEffect(() => {
     setStopped(false);
@@ -85,6 +92,16 @@ function OrderTrackingContent({
             nextDispatch = d as DispatchView;
             setDispatch(nextDispatch);
           }
+        }
+        const enRoute =
+          nextDispatch?.status === DISPATCH_STATUS.DISPATCHED || nextDispatch?.status === DISPATCH_STATUS.PICKED_UP;
+        if (enRoute) {
+          // A swallowed fetch error -> undefined -> keep the last known position (no flicker).
+          // A legitimate server null (no ping yet) still clears the marker.
+          const loc = await getOrderDriverLocation(orderId).catch(() => undefined);
+          if (active && loc !== undefined) setDriverLocation(loc);
+        } else if (active) {
+          setDriverLocation(null);
         }
         // Stop on cancellation, or once an accepted order's delivery has finished.
         const deliveryTerminal =
@@ -169,6 +186,12 @@ function OrderTrackingContent({
                     <span className="font-semibold">
                       {dispatch ? deliveryStatusLabel(dispatch.status) : "Preparing…"}
                     </span>
+                  </div>
+                )}
+                {(dispatch?.status === DISPATCH_STATUS.DISPATCHED || dispatch?.status === DISPATCH_STATUS.PICKED_UP) && (
+                  <div className="space-y-1">
+                    <div className="text-sm text-muted-foreground">Driver en route</div>
+                    <DriverMap center={CITY_CENTERS[tenantId]} driver={driverLocation} />
                   </div>
                 )}
                 {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (

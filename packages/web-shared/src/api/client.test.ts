@@ -14,7 +14,7 @@ import {
   reportLocation,
   UnauthorizedError,
   type PlaceOrderRequest,
-  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches,
+  goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches, getOrderDriverLocation,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -345,5 +345,18 @@ describe("api client", () => {
     });
     await Promise.all([getOrder("o-1"), listOrders()]);
     expect(refreshCalls).toBe(1);
+  });
+
+  it("getOrderDriverLocation GETs the driver-location read and unwraps the envelope", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ location: { lng: 13.4, lat: 52.5 } }), { status: 200 }));
+    const res = await getOrderDriverLocation("o-1");
+    expect(res).toEqual({ lng: 13.4, lat: 52.5 });
+    expect(lastUrl()).toBe("/api/read/orders/o-1/driver-location");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
+  });
+
+  it("getOrderDriverLocation returns null when there is no location", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ location: null }), { status: 200 }));
+    expect(await getOrderDriverLocation("o-2")).toBeNull();
   });
 });

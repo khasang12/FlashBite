@@ -101,7 +101,7 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 |---|---|---|---|
 | `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
 | `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal; relay driver dispatch commands (`POST /dispatch/:orderId/{accept,reject,pickup,deliver}`) as signals to the dispatch child workflow. `@Roles` gates: `customer` places, `merchant` accepts/declines, `driver` acts on dispatch. |
-| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch snapshot `GET /merchant/dispatch` + live SSE `GET /merchant/dispatch/stream` (both driver-identity-stripped); telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
+| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch snapshot `GET /merchant/dispatch` + live SSE `GET /merchant/dispatch/stream` (both driver-identity-stripped); telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console; the order driver-location read `GET /orders/:orderId/driver-location` (en-route only, coords-only). |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
@@ -278,6 +278,12 @@ flowchart LR
   Both non-driver reads are projected to a `DeliveryView` that **strips driver identity** server-side
   (`driverId`/`offeredDriverId` never reach the customer/merchant wire); the driver's own SSE keeps it.
   Outward-facing labels (`deliveryStatusLabel`), distinct from the driver-facing `dispatchStatusLabel`.
+- **Customer live driver-location map (Phase 3d-iii):** while an order is out for delivery
+  (DISPATCHED/PICKED_UP), the customer tracking page polls `GET /orders/:orderId/driver-location` and
+  shows the driver's live dot on a Mapbox map (web-customer `DriverMap`, recentering as it moves). The
+  endpoint resolves the order's driver server-side and returns only `{lng,lat}` from Redis `GEOPOS`
+  (driver identity never reaches the customer). No destination pin / route -- orders carry no delivery
+  coordinates; the map uses the tenant city center as reference.
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;

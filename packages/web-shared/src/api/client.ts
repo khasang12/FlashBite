@@ -227,3 +227,11 @@ export async function getDispatchForDriver(driverId: string): Promise<DispatchVi
   if (!res.ok) throw new Error(`getDispatchForDriver failed: ${res.status}`);
   return (await res.json()) as DispatchView | { status: null };
 }
+
+/** GET /orders/:orderId/driver-location — the assigned driver's live position while en route, or
+ *  null (not en route / no ping yet). The server resolves the driver; no driverId is exposed. */
+export async function getOrderDriverLocation(orderId: string): Promise<{ lng: number; lat: number } | null> {
+  const res = await authedFetch(`/api/read/orders/${encodeURIComponent(orderId)}/driver-location`);
+  if (!res.ok) throw new Error(`getOrderDriverLocation failed: ${res.status}`);
+  return ((await res.json()) as { location: { lng: number; lat: number } | null }).location;
+}
