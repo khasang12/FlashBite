@@ -3,6 +3,7 @@ export type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contract
 export { ORDER_STATUS } from "@flashbite/contracts";
 export { DISPATCH_STATUS } from "@flashbite/contracts";
 export type { DispatchView, DispatchStatus } from "@flashbite/contracts";
+export type { TenantView } from "@flashbite/contracts";
 
 // Design-system primitives (shadcn/ui, new-york).
 export { cn } from "./lib/utils";
@@ -51,6 +52,7 @@ export {
   placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
+  getTenants,
   goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches,
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
