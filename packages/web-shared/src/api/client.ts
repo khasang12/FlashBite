@@ -38,11 +38,16 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Per-app refresh-cookie scoping: identity reads X-FB-App to pick this app's cookie name
+// (cookies ignore port, so localhost apps would otherwise share one fb_rt). See auth-store.
+const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
+const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
+
 /** Single-flight refresh: concurrent 401s share one /auth/refresh call. */
 let refreshing: Promise<boolean> | null = null;
 
 async function refreshSession(): Promise<boolean> {
-  const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include" });
+  const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader() });
   if (!res.ok) return false;
   const { accessToken } = (await res.json()) as { accessToken: string };
   useAuthStore.getState().setToken(accessToken);

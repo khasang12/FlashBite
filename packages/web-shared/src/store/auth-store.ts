@@ -2,6 +2,12 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+// Identifies this frontend so identity scopes the httpOnly refresh cookie per-app
+// (cookies ignore port, so localhost apps would otherwise share one fb_rt). Set per app
+// via next.config `env`. Empty -> identity uses the base cookie name (back-compat).
+const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
+const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
+
 export interface AuthClaims {
   sub: string;
   tenantId: string;
@@ -38,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
         const res = await fetch("/api/identity/auth/login", {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...fbAppHeader() },
           body: JSON.stringify({ email, password }),
         });
         if (!res.ok) throw new Error("Invalid email or password");
@@ -47,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: () => {
         // best-effort server revoke (clears the httpOnly RT cookie); state is cleared regardless.
-        void Promise.resolve(fetch("/api/identity/auth/logout", { method: "POST", credentials: "include" })).catch(() => undefined);
+        void Promise.resolve(fetch("/api/identity/auth/logout", { method: "POST", credentials: "include", headers: fbAppHeader() })).catch(() => undefined);
         set({ token: null, claims: null });
       },
       setToken: (token) => set({ token, claims: decodeClaims(token) }),

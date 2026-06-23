@@ -74,6 +74,20 @@ describe("identity refresh/logout (e2e)", () => {
     expect(res.status).toBe(401);
   });
 
+  it("scopes the refresh cookie per app via X-FB-App (isolates apps sharing a host)", async () => {
+    const res = await request(app.getHttpServer()).post("/auth/login").set("X-FB-App", "driver").send({ email, password });
+    const set = (res.headers["set-cookie"] as unknown as string[]).join("\n");
+    expect(set).toContain("fb_rt_driver=");
+    expect(set).not.toContain(`${RT}=`); // not the base name
+  });
+
+  it("a driver-app cookie cannot refresh a merchant-app session (no cross-app bleed)", async () => {
+    const login = await request(app.getHttpServer()).post("/auth/login").set("X-FB-App", "driver").send({ email, password });
+    const driverCookie = cookieFrom(login); // fb_rt_driver=...
+    const res = await request(app.getHttpServer()).post("/auth/refresh").set("X-FB-App", "merchant").set("Cookie", driverCookie);
+    expect(res.status).toBe(401); // merchant app reads fb_rt_merchant, which isn't present
+  });
+
   it("logout revokes the session so a later refresh with that cookie is 401", async () => {
     const login = await request(app.getHttpServer()).post("/auth/login").send({ email, password });
     const cookie1 = cookieFrom(login);
