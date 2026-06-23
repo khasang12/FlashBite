@@ -62,7 +62,9 @@ jobs:
           node packages/shared/node_modules/prisma/build/index.js migrate deploy --schema apps/payments/prisma/schema.prisma
 
       - name: Seed tenant catalog
-        run: pnpm seed:tenants
+        # Run the script directly (not `pnpm seed:tenants`, which uses --env-file=.env):
+        # CI injects env via the job `env:` block and has no .env file.
+        run: node -r @swc-node/register -r tsconfig-paths/register apps/identity/src/seed-tenants.ts
 
       - name: Run tests
         run: |
