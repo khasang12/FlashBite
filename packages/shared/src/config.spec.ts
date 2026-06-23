@@ -53,7 +53,7 @@ describe("loadConfig JWT settings", () => {
     const c = loadConfig({ ...base });
     expect(c.jwtIssuer).toBe("flashbite-identity");
     expect(c.jwtAudience).toBe("flashbite");
-    expect(c.jwtAccessTtl).toBe(3600);
+    expect(c.jwtAccessTtl).toBe(900);
   });
 
   it("reads overrides from env", () => {
