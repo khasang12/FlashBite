@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import {
-  AuthGate, useAuthStore,
+  AuthGate, useAuthStore, useTenants,
   type Tenant, type DispatchView,
-  CITY_CENTERS, toNearbyRows,
+  toNearbyRows,
   DISPATCH_STATUS, DISPATCH_OFFER_TIMEOUT_SECONDS,
   useDispatchStream,
   acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDriverOnline,
@@ -55,11 +55,13 @@ function DriverDashboard() {
       ? dispatch
       : null;
 
-  const center = CITY_CENTERS[tenantId];
-  const { nearby } = useNearbyWatch(center, online);
+  const { tenants } = useTenants();
+  const me = tenants.find((t) => t.slug === tenantId);
+  const center = me ? { lng: me.lng, lat: me.lat } : null;
+  // Don't poll until the city center is known; pass a placeholder coord while watching is false.
+  const { nearby } = useNearbyWatch(center ?? { lng: 0, lat: 0 }, online && center !== null);
   const self = nearby.find((d) => d.driverId === driverId) ?? null;
   const others = toNearbyRows(nearby, driverId);
-  const mapCenter = self ? { lng: self.lng, lat: self.lat } : center;
 
   const onExpire = useCallback(() => { if (offer) setDismissed(offer.orderId); }, [offer]);
 
@@ -99,13 +101,16 @@ function DriverDashboard() {
           </div>
         )}
 
-        {online && (
+        {online && !center && (
+          <div className="rounded-xl border px-5 py-4 text-sm text-muted-foreground">Locating your city…</div>
+        )}
+        {online && center && (
           <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Nearby · 5km radius
               </div>
-              <NearbyMap center={mapCenter} self={self} nearby={others} />
+              <NearbyMap center={self ? { lng: self.lng, lat: self.lat } : center} self={self} nearby={others} />
             </section>
             <section>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
