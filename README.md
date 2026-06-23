@@ -96,6 +96,10 @@ flowchart LR
   persisted.
 - **Idempotency & dedup** — at every hop: stable `eventId`, Mongo inbox pattern, Temporal
   `WorkflowId = tenantId:orderId` reject-duplicate reuse policy.
+- **DB-backed tenant catalog + per-request validation** — the `tenants` table is the runtime source
+  of truth for active tenants; `TenantCatalogService` caches it (TTL-driven, fail-closed on cold
+  miss); `TenantGuard` validates every request's `tenantId` against the live catalog; `GET /tenants`
+  exposes it. Identity seeds read active slugs from the catalog, removing the hardcoded list.
 - **Identity & verified-JWT tenancy (Phase 2)** — a dedicated `identity` service issues **RS256**
   access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
   `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is

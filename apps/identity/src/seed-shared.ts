@@ -2,9 +2,14 @@ import argon2 from "argon2";
 import { PrismaClient } from "@flashbite/shared";
 import { ROLES } from "@flashbite/contracts";
 
-export const TENANTS = ["berlin", "tokyo"] as const;
 export const SEED_ROLES = [ROLES.CUSTOMER, ROLES.MERCHANT, ROLES.ADMIN] as const;
 export const DRIVER_IDS = ["drv-1", "drv-2", "drv-3", "drv-4"] as const;
+
+/** Active tenant slugs from the catalog table (the single source of truth). */
+export async function tenantSlugs(prisma: PrismaClient): Promise<string[]> {
+  const rows = await prisma.tenant.findMany({ where: { status: "active" } });
+  return rows.map((r) => r.slug);
+}
 
 /** argon2id hash of the shared dev seed password (override via SEED_USER_PASSWORD). */
 export function hashSeedPassword(): Promise<string> {
@@ -19,8 +24,8 @@ export function driverUserId(tenantId: string, driverId: string): string {
 
 /** Seed the per-tenant driver accounts (drv-1..drv-4 @ <tenant>.test), idempotent.
  *  Shared by the full user seed and the standalone `seed:drivers` script. */
-export async function seedDrivers(prisma: PrismaClient, passwordHash: string): Promise<void> {
-  for (const tenantId of TENANTS) {
+export async function seedDrivers(prisma: PrismaClient, passwordHash: string, slugs: string[]): Promise<void> {
+  for (const tenantId of slugs) {
     for (const driverId of DRIVER_IDS) {
       const id = driverUserId(tenantId, driverId);
       const email = `${driverId}@${tenantId}.test`;

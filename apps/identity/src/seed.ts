@@ -1,12 +1,17 @@
 import { PrismaClient } from "@flashbite/shared";
 import { ROLES } from "@flashbite/contracts";
-import { TENANTS, SEED_ROLES, seedDrivers, hashSeedPassword } from "./seed-shared";
+import { tenantSlugs, SEED_ROLES, seedDrivers, hashSeedPassword } from "./seed-shared";
 
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
   const passwordHash = await hashSeedPassword();
   try {
-    for (const tenantId of TENANTS) {
+    const slugs = await tenantSlugs(prisma);
+    if (slugs.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn("No active tenants found — run `pnpm seed:tenants` first.");
+    }
+    for (const tenantId of slugs) {
       for (const role of SEED_ROLES) {
         const email = `${role}@${tenantId}.test`;
         await prisma.user.upsert({
@@ -19,7 +24,7 @@ async function main(): Promise<void> {
       }
     }
     // Drivers (drv-1..drv-4) are DB user accounts alongside the merchant/customer/admin rows above.
-    await seedDrivers(prisma, passwordHash);
+    await seedDrivers(prisma, passwordHash, slugs);
     // Platform operator: cross-tenant console principal (not pinned to a tenant).
     await prisma.user.upsert({
       where: { email: "operator@flashbite.test" },

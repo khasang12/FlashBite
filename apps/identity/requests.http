@@ -1,0 +1,48 @@
+# FlashBite identity service (port 3003) — login + JWKS.
+# Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
+# Prereqs:
+#   pnpm dev:identity  +  pnpm seed:tenants  +  pnpm seed:users
+
+@identityUrl = http://localhost:3003
+@readUrl = http://localhost:3002
+@seedPassword = devpassword
+
+### Login as a berlin merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 3600 }.
+# @name login
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "merchant@berlin.test",
+  "password": "{{seedPassword}}"
+}
+
+###
+
+### Login as a berlin customer.
+# @name loginCustomer
+POST {{identityUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@berlin.test",
+  "password": "{{seedPassword}}"
+}
+
+###
+
+### JWKS — public keys used to verify tokens. Expect 200 { "keys": [ ... ] }.
+GET {{identityUrl}}/.well-known/jwks.json
+
+###
+
+### Identity health — always open. Expect 200 { "status": "ok" }.
+GET {{identityUrl}}/health
+
+###
+
+### Tenants (active catalog)
+GET {{readUrl}}/tenants
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+###

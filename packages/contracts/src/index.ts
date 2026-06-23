@@ -220,8 +220,7 @@ export const ROLES = {
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
 // ---- Geo / operator console ----
-export const TENANTS = ["berlin", "tokyo"] as const;
-export type Tenant = (typeof TENANTS)[number];
+export type Tenant = string;
 
 export interface GeoPoint {
   lng: number;
@@ -235,11 +234,6 @@ export interface TenantView {
   lat: number;
   status: string;
 }
-
-export const CITY_CENTERS: Record<Tenant, GeoPoint> = {
-  berlin: { lng: 13.405, lat: 52.52 },
-  tokyo: { lng: 139.7, lat: 35.68 },
-};
 
 export interface NearbyDriver {
   driverId: string;
