@@ -1,4 +1,4 @@
-# FlashBite identity service (port 3003) — login + JWKS.
+# FlashBite identity service (port 3003) - login + JWKS.
 # Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
 # Prereqs:
 #   pnpm dev:identity  +  pnpm seed:tenants  +  pnpm seed:users
@@ -31,12 +31,12 @@ Content-Type: application/json
 
 ###
 
-### JWKS — public keys used to verify tokens. Expect 200 { "keys": [ ... ] }.
+### JWKS - public keys used to verify tokens. Expect 200 { "keys": [ ... ] }.
 GET {{identityUrl}}/.well-known/jwks.json
 
 ###
 
-### Identity health — always open. Expect 200 { "status": "ok" }.
+### Identity health - always open. Expect 200 { "status": "ok" }.
 GET {{identityUrl}}/health
 
 ###

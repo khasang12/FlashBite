@@ -9,7 +9,7 @@ async function main(): Promise<void> {
     const slugs = await tenantSlugs(prisma);
     if (slugs.length === 0) {
       // eslint-disable-next-line no-console
-      console.warn("No active tenants found — run `pnpm seed:tenants` first.");
+      console.warn("No active tenants found - run `pnpm seed:tenants` first.");
     }
     for (const tenantId of slugs) {
       for (const role of SEED_ROLES) {
