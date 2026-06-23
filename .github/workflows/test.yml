@@ -61,6 +61,9 @@ jobs:
           pnpm payments:generate
           node packages/shared/node_modules/prisma/build/index.js migrate deploy --schema apps/payments/prisma/schema.prisma
 
+      - name: Seed tenant catalog
+        run: pnpm seed:tenants
+
       - name: Run tests
         run: |
           node -r @swc-node/register -r tsconfig-paths/register apps/payments/src/main.ts & echo $! > /tmp/payments.pid
