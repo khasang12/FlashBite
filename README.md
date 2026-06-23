@@ -99,7 +99,10 @@ flowchart LR
 - **DB-backed tenant catalog + per-request validation** — the `tenants` table is the runtime source
   of truth for active tenants; `TenantCatalogService` caches it (TTL-driven, fail-closed on cold
   miss); `TenantGuard` validates every request's `tenantId` against the live catalog; `GET /tenants`
-  exposes it. Identity seeds read active slugs from the catalog, removing the hardcoded list.
+  exposes it. Identity seeds read active slugs from the catalog, removing the hardcoded list. The
+  frontends are catalog-driven via `useTenants()` - web-admin renders per-tenant driver maps from
+  catalog metadata, web-driver derives its city center from its catalog entry; no hardcoded tenant
+  constants remain in web-shared.
 - **Identity & verified-JWT tenancy (Phase 2)** — a dedicated `identity` service issues **RS256**
   access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
   `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is
