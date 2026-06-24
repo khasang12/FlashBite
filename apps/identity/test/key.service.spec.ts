@@ -1,11 +1,23 @@
 import "reflect-metadata";
-import { PrismaService } from "@flashbite/shared";
+import { PrismaService, type AppConfig } from "@flashbite/shared";
 import { KeyService } from "../src/auth/key.service";
+import { isSealed, openPrivateJwk } from "../src/auth/key-cipher";
+
+const TEST_KEK = Buffer.alloc(32, 3).toString("base64");
 
 describe("KeyService (persisted, live DB)", () => {
   const prisma = new PrismaService();
 
-  afterAll(async () => { await prisma.$disconnect(); });
+  afterAll(async () => {
+    // The encryption test re-seals this (shared dev) DB's keys under TEST_KEK. Restore them to
+    // plaintext so a local `dev:identity` — which runs without a KEK — can still load them.
+    for (const r of await prisma.signingKey.findMany()) {
+      if (isSealed(r.privateJwk)) {
+        await prisma.signingKey.update({ where: { kid: r.kid }, data: { privateJwk: openPrivateJwk(r.privateJwk, TEST_KEK) } });
+      }
+    }
+    await prisma.$disconnect();
+  });
 
   it("persists the signing key across restarts (same kid)", async () => {
     const k1 = new KeyService(prisma);
@@ -35,5 +47,16 @@ describe("KeyService (persisted, live DB)", () => {
     const kids = k.jwks().keys.map((j) => j.kid);
     expect(kids).toContain(after);
     expect(kids).toContain(before);
+  });
+
+  it("envelope-encrypts the private key at rest when a KEK is configured", async () => {
+    const k = new KeyService(prisma, { signingKeyKek: TEST_KEK } as AppConfig);
+    await k.onModuleInit();
+    await k.rotate(); // force a fresh key generated under the KEK
+    const kid = k.signingKey().kid;
+    const row = await prisma.signingKey.findUniqueOrThrow({ where: { kid } });
+    expect(isSealed(row.privateJwk)).toBe(true);
+    expect(row.privateJwk).not.toContain('"d"'); // private exponent not stored in cleartext
+    expect(k.signingKey().key).toBeDefined(); // and it still loads/usable for signing
   });
 });
