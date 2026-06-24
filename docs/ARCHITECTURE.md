@@ -445,6 +445,23 @@ sequenceDiagram
   and runs the request inside an `AsyncLocalStorage` scope of `{tenantId, role, sub}`. There is **no
   `X-Tenant-ID` fallback** — a missing/invalid token is `401`. Mutations are gated by `@Roles`
   (`customer` places, `merchant` accepts/declines, `operator` for `/admin/*`).
+- **Access + refresh tokens (identity hardening):** login returns a short-lived RS256 access
+  token (JWT_ACCESS_TTL=900s, body `{accessToken,tokenType,expiresIn}`) plus a server-tracked,
+  rotating refresh token delivered ONLY as an httpOnly SameSite=Strict cookie (sha-256 hashed at
+  rest, never returned in a body). `POST /auth/refresh` rotates the RT (one-time-use; reusing a
+  rotated/revoked RT revokes the whole token family) and mints a fresh AT; `POST /auth/logout`
+  revokes it. The RSA signing key is persisted in `signing_keys`; JWKS publishes current+previous
+  so a deliberate rotation never breaks in-flight access tokens. Resource-server token verification
+  is unchanged (JWKS resolves multiple kids).
+  - **AT in memory, not localStorage:** the access token lives only in the web-shared auth store
+    (in-memory), so XSS cannot read it at rest. On load `AuthGate` runs a one-time `bootstrap()`
+    that exchanges the httpOnly refresh cookie for a fresh AT (silent re-login across reloads);
+    `authedFetch` also silently refreshes once on a 401 (single-flight) and retries.
+  - **Per-app refresh cookie:** browser cookies are scoped by host, not port, so the frontends on
+    `localhost:31xx` would otherwise share one cookie. Each app sends an `X-FB-App` header
+    (`NEXT_PUBLIC_FB_APP`, set in its `next.config`) and identity suffixes the cookie name
+    (`fb_rt_<app>`), keeping sessions isolated; absent the header it uses the base `fb_rt` name
+    (in prod each app is its own subdomain, so they are isolated anyway).
 - **Postgres Row-Level Security (write plane):** `event_store` + `outbox` have RLS enabled +
   forced; write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
   set `app.tenant_id` as the first statement of each write transaction (`withTenantTransaction`), so
@@ -481,10 +498,11 @@ Manrope, the API client, the **auth store** + `AuthGate`/`LoginForm`, `useOrderS
 CORS-free and the proxy forwards `Authorization` automatically).
 
 Every app is wrapped in an `AuthGate` (role-gated): no token shows a minimal `LoginForm` (email +
-password, with a one-click **demo-user quick-pick**); the token is stored in `localStorage`, and the
-API client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
-switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/expiry machinery yet
-(a `401` bounces back to login — backlog).
+password, with a one-click **demo-user quick-pick**); the access token is held **in memory** (never
+localStorage) and `AuthGate` bootstraps it from the httpOnly refresh cookie on load, and the API
+client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
+switcher anymore; "switch tenant" = log in as that tenant's user). A `401` triggers one silent
+refresh + retry (see "Access + refresh tokens" above); only a failed refresh bounces to login.
 
 - **web-customer** (`customer@<tenant>.test`) — menu/cart/checkout, then a tracking page that polls
   until terminal status.

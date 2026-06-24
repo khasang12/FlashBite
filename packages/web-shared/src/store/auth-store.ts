@@ -1,6 +1,11 @@
 "use client";
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+
+// Identifies this frontend so identity scopes the httpOnly refresh cookie per-app
+// (cookies ignore port, so localhost apps would otherwise share one fb_rt). Set per app
+// via next.config `env`. Empty -> identity uses the base cookie name (back-compat).
+const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
+const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
 
 export interface AuthClaims {
   sub: string;
@@ -11,36 +16,69 @@ export interface AuthClaims {
 interface AuthState {
   token: string | null;
   claims: AuthClaims | null;
+  /** True until the initial refresh-bootstrap settles; gate UI on it to avoid a login flash. */
+  booting: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  setToken: (token: string) => void;
+  /** Restore the in-memory session from the httpOnly refresh cookie (runs once per app load). */
+  bootstrap: () => Promise<void>;
 }
 
 /** Decode the JWT payload (base64url) for display / role-gating. NOT verification — the API verifies. */
 function decodeClaims(token: string): AuthClaims {
-  const payload = token.split(".")[1] ?? "";
-  const json = JSON.parse(
-    Buffer.from(payload.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
-  ) as Record<string, unknown>;
-  return { sub: String(json.sub ?? ""), tenantId: String(json.tenantId ?? ""), role: String(json.role ?? "") };
+  try {
+    const payload = token.split(".")[1] ?? "";
+    const json = JSON.parse(
+      Buffer.from(payload.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
+    ) as Record<string, unknown>;
+    return { sub: String(json.sub ?? ""), tenantId: String(json.tenantId ?? ""), role: String(json.role ?? "") };
+  } catch {
+    return { sub: "", tenantId: "", role: "" };
+  }
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      claims: null,
-      login: async (email, password) => {
-        const res = await fetch("/api/identity/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        if (!res.ok) throw new Error("Invalid email or password");
+// Run the refresh-bootstrap once per app load (a real page reload re-imports this module and resets it).
+// Guarding here — not in the React tree — keeps client-side navigations (which remount AuthGate) from
+// re-hitting /auth/refresh and needlessly rotating the refresh token.
+let bootstrapped = false;
+
+// The access token lives ONLY in memory (this store) — never localStorage — so XSS can't read it at
+// rest. The long-lived credential is the httpOnly refresh cookie; on load we exchange it for a fresh AT.
+export const useAuthStore = create<AuthState>((set) => ({
+  token: null,
+  claims: null,
+  booting: true,
+  login: async (email, password) => {
+    const res = await fetch("/api/identity/auth/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...fbAppHeader() },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) throw new Error("Invalid email or password");
+    const { accessToken } = (await res.json()) as { accessToken: string };
+    set({ token: accessToken, claims: decodeClaims(accessToken) });
+  },
+  logout: () => {
+    // best-effort server revoke (clears the httpOnly RT cookie); state is cleared regardless.
+    void Promise.resolve(fetch("/api/identity/auth/logout", { method: "POST", credentials: "include", headers: fbAppHeader() })).catch(() => undefined);
+    set({ token: null, claims: null });
+  },
+  setToken: (token) => set({ token, claims: decodeClaims(token) }),
+  bootstrap: async () => {
+    if (bootstrapped) return;
+    bootstrapped = true;
+    try {
+      const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader() });
+      if (res.ok) {
         const { accessToken } = (await res.json()) as { accessToken: string };
         set({ token: accessToken, claims: decodeClaims(accessToken) });
-      },
-      logout: () => set({ token: null, claims: null }),
-    }),
-    { name: "fb-auth", storage: createJSONStorage(() => localStorage), skipHydration: true },
-  ),
-);
+      }
+    } catch {
+      // no valid session / offline — fall through to the login screen
+    } finally {
+      set({ booting: false });
+    }
+  },
+}));

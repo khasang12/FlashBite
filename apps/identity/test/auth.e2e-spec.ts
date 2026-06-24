@@ -36,7 +36,7 @@ describe("identity auth (e2e)", () => {
     const res = await request(app.getHttpServer()).post("/auth/login").send({ email, password });
     expect(res.status).toBe(201);
     expect(res.body.tokenType).toBe("Bearer");
-    expect(res.body.expiresIn).toBe(3600);
+    expect(res.body.expiresIn).toBe(900);
 
     const jwks = await request(app.getHttpServer()).get("/.well-known/jwks.json");
     const pub = await importJWK(jwks.body.keys[0], "RS256");

@@ -1,10 +1,16 @@
+import "reflect-metadata";
 import { importJWK, jwtVerify } from "jose";
+import { PrismaService } from "@flashbite/shared";
 import { KeyService } from "../src/auth/key.service";
 import { TokenService } from "../src/auth/token.service";
 
 describe("TokenService", () => {
+  const prisma = new PrismaService();
+
+  afterAll(async () => { await prisma.$disconnect(); });
+
   it("signs an RS256 token with the documented claims, verifiable via the public JWK", async () => {
-    const keys = new KeyService();
+    const keys = new KeyService(prisma);
     await keys.onModuleInit();
     const cfg = { jwtIssuer: "flashbite-identity", jwtAudience: "flashbite", jwtAccessTtl: 3600 };
     const tokens = new TokenService(keys, cfg as never);
