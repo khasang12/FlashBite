@@ -100,7 +100,7 @@ flowchart LR
   access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
   `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is
   **gone** — isolation rests on cryptographic identity, not a client-supplied header.
-- **Identity hardening: short-lived access tokens + rotating httpOnly refresh-token cookies, persisted+rotatable signing key.**
+- **Identity hardening** — short-lived access tokens kept **in memory** (not localStorage) and bootstrapped on load from a rotating, one-time-use **httpOnly refresh-token cookie** (scoped per app so local frontends don't collide); reuse of a rotated token revokes the whole family; persisted + rotatable RS256 signing key.
 - **Postgres Row-Level Security (Phase 2)** — the write plane (`event_store` + `outbox`) is RLS-
   enforced: write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
   set `app.tenant_id` per transaction, so a tenant can never read or write another's rows even if
