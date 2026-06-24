@@ -453,6 +453,14 @@ sequenceDiagram
   revokes it. The RSA signing key is persisted in `signing_keys`; JWKS publishes current+previous
   so a deliberate rotation never breaks in-flight access tokens. Resource-server token verification
   is unchanged (JWKS resolves multiple kids).
+- **Signing key encrypted at rest:** the signing key is the system's master credential — forging it
+  mints valid tokens for any tenant/role — so its private JWK is **envelope-encrypted** (AES-256-GCM)
+  under a KEK held outside the DB in `SIGNING_KEY_KEK` (base64, 32 bytes). A database-only leak
+  yields ciphertext that is useless without the KEK. The KEK is **required in production** (identity
+  refuses to boot without it); in dev it may be omitted, in which case the key is stored plaintext
+  with a loud warning. Legacy plaintext rows are read transparently and re-sealed once a KEK is set.
+  Losing the KEK is unrecoverable by design — rotate the key (issues a fresh one) to recover. A KMS/
+  HSM-backed signer (key never leaves the KMS) remains the stronger production option.
   - **AT in memory, not localStorage:** the access token lives only in the web-shared auth store
     (in-memory), so XSS cannot read it at rest. On load `AuthGate` runs a one-time `bootstrap()`
     that exchanges the httpOnly refresh cookie for a fresh AT (silent re-login across reloads);
