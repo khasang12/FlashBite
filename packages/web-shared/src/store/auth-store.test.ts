@@ -35,4 +35,16 @@ describe("auth store", () => {
     expect(useAuthStore.getState().token).toBeNull();
     expect(useAuthStore.getState().claims).toBeNull();
   });
+
+  it("bootstrap restores the in-memory session from the refresh cookie and clears booting", async () => {
+    const token = makeJwt({ sub: "u-9", tenantId: "tokyo", role: "merchant" });
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ accessToken: token, tokenType: "Bearer", expiresIn: 900 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await useAuthStore.getState().bootstrap();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/identity/auth/refresh");
+    expect(useAuthStore.getState().token).toBe(token);
+    expect(useAuthStore.getState().claims?.tenantId).toBe("tokyo");
+    expect(useAuthStore.getState().booting).toBe(false);
+  });
 });

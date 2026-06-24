@@ -38,14 +38,38 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** fetch + Bearer header; on 401 clears the session (AuthGate bounces to login) and throws. */
+// Per-app refresh-cookie scoping: identity reads X-FB-App to pick this app's cookie name
+// (cookies ignore port, so localhost apps would otherwise share one fb_rt). See auth-store.
+const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
+const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
+
+/** Single-flight refresh: concurrent 401s share one /auth/refresh call. */
+let refreshing: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader() });
+  if (!res.ok) return false;
+  const { accessToken } = (await res.json()) as { accessToken: string };
+  useAuthStore.getState().setToken(accessToken);
+  return true;
+}
+
+function ensureRefreshed(): Promise<boolean> {
+  if (!refreshing) refreshing = refreshSession().finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+/** fetch + Bearer header; on 401 try ONE silent refresh + retry, else clear the session and throw. */
 async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
-  if (res.status === 401) {
-    useAuthStore.getState().logout();
-    throw new UnauthorizedError();
+  let res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
+  if (res.status !== 401) return res;
+  const ok = await ensureRefreshed();
+  if (ok) {
+    res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
+    if (res.status !== 401) return res;
   }
-  return res;
+  useAuthStore.getState().logout();
+  throw new UnauthorizedError();
 }
 
 /** POST /orders via the same-origin write proxy. */
@@ -207,4 +231,12 @@ export async function getDispatchForDriver(driverId: string): Promise<DispatchVi
   const res = await authedFetch(`/api/read/driver/dispatch?${qs.toString()}`);
   if (!res.ok) throw new Error(`getDispatchForDriver failed: ${res.status}`);
   return (await res.json()) as DispatchView | { status: null };
+}
+
+/** GET /orders/:orderId/driver-location — the assigned driver's live position while en route, or
+ *  null (not en route / no ping yet). The server resolves the driver; no driverId is exposed. */
+export async function getOrderDriverLocation(orderId: string): Promise<{ lng: number; lat: number } | null> {
+  const res = await authedFetch(`/api/read/orders/${encodeURIComponent(orderId)}/driver-location`);
+  if (!res.ok) throw new Error(`getOrderDriverLocation failed: ${res.status}`);
+  return ((await res.json()) as { location: { lng: number; lat: number } | null }).location;
 }

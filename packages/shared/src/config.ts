@@ -18,6 +18,10 @@ export interface AppConfig {
   jwtIssuer: string;
   jwtAudience: string;
   jwtAccessTtl: number;
+  jwtRefreshTtl: number;
+  rtCookieName: string;
+  rtCookieSecure: boolean;
+  rtCookiePath: string;
   jwtJwksUrl: string;
   dispatchOfferTimeoutSeconds: number;
   dispatchMaxOffers: number;
@@ -73,7 +77,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     paymentConfirmTimeoutSeconds: Number(env.PAYMENT_CONFIRM_TIMEOUT_SECONDS ?? 120),
     jwtIssuer: env.JWT_ISSUER ?? "flashbite-identity",
     jwtAudience: env.JWT_AUDIENCE ?? "flashbite",
-    jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 3600),
+    jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 900),
+    jwtRefreshTtl: Number(env.JWT_REFRESH_TTL ?? 2592000),
+    rtCookieName: env.RT_COOKIE_NAME ?? "fb_rt",
+    rtCookieSecure: (env.RT_COOKIE_SECURE ?? "false") === "true",
+    rtCookiePath: env.RT_COOKIE_PATH ?? "/api/identity/auth",
     jwtJwksUrl: env.JWT_JWKS_URL ?? "http://localhost:3003/.well-known/jwks.json",
     dispatchOfferTimeoutSeconds: Number(env.DISPATCH_OFFER_TIMEOUT_SECONDS ?? 30),
     dispatchMaxOffers: Number(env.DISPATCH_MAX_OFFERS ?? 5),

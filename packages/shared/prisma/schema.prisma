@@ -69,3 +69,31 @@ model Tenant {
   createdAt   DateTime @default(now()) @map("created_at")
   @@map("tenants")
 }
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  familyId  String    @map("family_id")
+  userId    String    @map("user_id")
+  tenantId  String    @map("tenant_id")
+  tokenHash String    @unique @map("token_hash")
+  status    String    @default("active")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  rotatedAt DateTime? @map("rotated_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  @@index([familyId])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model SigningKey {
+  kid        String   @id
+  alg        String   @default("RS256")
+  privateJwk String   @map("private_jwk")
+  publicJwk  String   @map("public_jwk")
+  status     String   @default("current")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("signing_keys")
+}
