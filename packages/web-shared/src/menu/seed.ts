@@ -1,4 +1,4 @@
-import type { Tenant } from "../store/tenant-store";
+// (no Tenant import - menus are keyed by tenant slug as a plain string)
 
 export interface MenuItem {
   sku: string;
@@ -10,7 +10,9 @@ export interface MenuItem {
   popular?: boolean;
 }
 
-const MENUS: Record<Tenant, MenuItem[]> = {
+const DEFAULT_TENANT = "berlin";
+
+const MENUS: Record<string, MenuItem[]> = {
   berlin: [
     { sku: "pizza", name: "Pizza Margherita", description: "San Marzano, basil", priceCents: 1200, category: "pizza", popular: true },
     { sku: "burger", name: "Cheeseburger", description: "Aged cheddar", priceCents: 950, category: "burgers", popular: true },
@@ -25,11 +27,12 @@ const MENUS: Record<Tenant, MenuItem[]> = {
   ],
 };
 
-export function getMenu(tenant: Tenant): MenuItem[] {
-  return MENUS[tenant];
+/** Demo storefront menu (not catalog data); unknown tenants fall back to the default menu. */
+export function getMenu(tenant: string): MenuItem[] {
+  return MENUS[tenant] ?? MENUS[DEFAULT_TENANT];
 }
 
 /** Client-side "most chosen" until a backend popular endpoint exists. */
-export function getPopular(tenant: Tenant): MenuItem[] {
-  return MENUS[tenant].filter((i) => i.popular);
+export function getPopular(tenant: string): MenuItem[] {
+  return getMenu(tenant).filter((i) => i.popular);
 }

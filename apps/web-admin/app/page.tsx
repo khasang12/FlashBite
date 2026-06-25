@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { AuthGate, TENANTS, CITY_CENTERS, Input, type Tenant } from "@flashbite/web-shared";
+import { AuthGate, Input, useTenants } from "@flashbite/web-shared";
 import { useAdminData } from "@/hooks/use-admin-data";
 import { AdminStream } from "@/components/tenant-stream";
 import { StatCards } from "@/components/stat-cards";
@@ -10,6 +10,7 @@ import { AdminOrdersTable } from "@/components/admin-orders-table";
 
 function Dashboard() {
   const { orders, driversByTenant, errors, handleEvent, resync } = useAdminData();
+  const { tenants, loading: tenantsLoading } = useTenants();
   const [filter, setFilter] = useState("");
 
   return (
@@ -19,7 +20,7 @@ function Dashboard() {
       <header className="flex items-center justify-between border-b px-6 py-4">
         <div className="text-lg font-extrabold">flashbite <span className="text-muted-foreground font-semibold">admin</span></div>
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <span className="h-2 w-2 rounded-full bg-primary" /> live · {TENANTS.join(" + ")}
+          <span className="h-2 w-2 rounded-full bg-primary" /> live · {tenants.map((t) => t.displayName).join(" + ")}
         </div>
       </header>
 
@@ -40,9 +41,13 @@ function Dashboard() {
         </section>
 
         <section aria-label="Driver maps" className="mt-6 grid gap-4 md:grid-cols-2">
-          {TENANTS.map((t: Tenant) => (
-            <TenantMap key={t} tenant={t} center={CITY_CENTERS[t]} drivers={driversByTenant[t] ?? []} />
-          ))}
+          {tenantsLoading && tenants.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Loading tenants…</div>
+          ) : (
+            tenants.map((t) => (
+              <TenantMap key={t.slug} tenant={t.slug} center={{ lng: t.lng, lat: t.lat }} drivers={driversByTenant[t.slug] ?? []} />
+            ))
+          )}
         </section>
 
         <section className="mt-6">

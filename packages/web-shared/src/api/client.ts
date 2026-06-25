@@ -1,4 +1,4 @@
-import type { OrderItem, OrderView, OrderPaymentView, DispatchView } from "@flashbite/contracts";
+import type { OrderItem, OrderView, OrderPaymentView, DispatchView, TenantView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
 
 export interface PlaceOrderRequest {
@@ -231,6 +231,13 @@ export async function getDispatchForDriver(driverId: string): Promise<DispatchVi
   const res = await authedFetch(`/api/read/driver/dispatch?${qs.toString()}`);
   if (!res.ok) throw new Error(`getDispatchForDriver failed: ${res.status}`);
   return (await res.json()) as DispatchView | { status: null };
+}
+
+/** GET /tenants - the active tenant catalog (slug, displayName, lng, lat, status). */
+export async function getTenants(): Promise<TenantView[]> {
+  const res = await authedFetch("/api/read/tenants");
+  if (!res.ok) throw new Error(`getTenants failed: ${res.status}`);
+  return (await res.json()) as TenantView[];
 }
 
 /** GET /orders/:orderId/driver-location — the assigned driver's live position while en route, or

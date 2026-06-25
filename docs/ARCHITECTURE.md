@@ -484,7 +484,10 @@ sequenceDiagram
   is a DB change honored within the cache TTL (`TENANT_CATALOG_TTL_MS`, default 60 s).
   `GET /tenants` exposes the active catalog to authenticated callers. Identity seeds
   (`seed:users`, `seed:drivers`) read active tenant slugs from the catalog table so the hardcoded
-  `TENANTS` constant is no longer needed.
+  `TENANTS` constant is no longer needed. The frontends consume the catalog via `GET /tenants` +
+  `useTenants()` - web-admin renders per-tenant driver maps using catalog metadata, web-driver
+  derives its city center from the catalog entry; no hardcoded tenant list or city-center constant
+  remains in web-shared.
 - **Kafka:** partition key `tenantId:orderId` preserves per-order ordering.
 - **Redis Cluster:** hash-tag keys co-locate a tenant's keys on one slot —
   `tenant:{id}:drivers:geo`, `tenant:{id}:order:<id>:view`. The brace wraps only the id so the key

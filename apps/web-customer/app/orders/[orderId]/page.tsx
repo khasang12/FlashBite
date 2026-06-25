@@ -17,7 +17,7 @@ import {
   AuthGate,
   ORDER_STATUS,
   getOrderDriverLocation,
-  CITY_CENTERS,
+  useTenants,
   useAuthStore,
   type OrderView,
   type DispatchView,
@@ -63,6 +63,9 @@ function OrderTrackingContent({
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const tenantId = (useAuthStore((s) => s.claims?.tenantId) ?? "berlin") as Tenant;
+  const { tenants } = useTenants();
+  const me = tenants.find((t) => t.slug === tenantId);
+  const mapCenter = me ? { lng: me.lng, lat: me.lat } : null;
   const [driverLocation, setDriverLocation] = useState<{ lng: number; lat: number } | null>(null);
 
   useEffect(() => {
@@ -191,7 +194,7 @@ function OrderTrackingContent({
                 {(dispatch?.status === DISPATCH_STATUS.DISPATCHED || dispatch?.status === DISPATCH_STATUS.PICKED_UP) && (
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Driver en route</div>
-                    <DriverMap center={CITY_CENTERS[tenantId]} driver={driverLocation} />
+                    {mapCenter && <DriverMap center={mapCenter} driver={driverLocation} />}
                   </div>
                 )}
                 {order.status === ORDER_STATUS.CANCELLED && cancelReasonLabel(order.cancelReason) && (

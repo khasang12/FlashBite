@@ -3,6 +3,7 @@ export type { OrderItem, OrderView, OrderPaymentView } from "@flashbite/contract
 export { ORDER_STATUS } from "@flashbite/contracts";
 export { DISPATCH_STATUS } from "@flashbite/contracts";
 export type { DispatchView, DispatchStatus } from "@flashbite/contracts";
+export type { TenantView } from "@flashbite/contracts";
 
 // Design-system primitives (shadcn/ui, new-york).
 export { cn } from "./lib/utils";
@@ -51,6 +52,7 @@ export {
   placeOrder, getOrder, fetchOrderPayment, listOrders, acceptOrder, declineOrder, confirmPayment,
   reportLocation, getNearbyDrivers,
   getAdminOrders, getAdminDrivers,
+  getTenants,
   goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches, getOrderDriverLocation,
   UnauthorizedError,
   type PlaceOrderRequest, type NearbyDriver, type ReportLocationBody, type TenantNearbyDriver,
@@ -60,10 +62,9 @@ export {
   aggregateGmv, gmvByTenant, statusBreakdown, topSkus, gmvOverTime, orderCounts, replaceTenantOrders,
   type TenantGmv, type TenantStatusCounts, type SkuCount, type GmvBucket, type OrderCounts,
 } from "./orders/analytics";
-export { TENANTS, type Tenant } from "./store/tenant-store";
+export type { Tenant } from "./store/tenant-store";
 export { useCartStore, type CartLine } from "./store/cart-store";
 export { type GeoPoint } from "./geo/types";
-export { CITY_CENTERS, type CityCenter } from "./geo/city-centers";
 export { toNearbyRows, formatKm } from "./geo/nearby";
 export { getMenu, getPopular, type MenuItem } from "./menu/seed";
 export { QtyStepper } from "./components/qty-stepper";
@@ -107,3 +108,4 @@ export {
 export { useAuthStore, type AuthClaims } from "./store/auth-store";
 export { LoginForm, type DemoUser } from "./components/login-form";
 export { AuthGate } from "./components/auth-gate";
+export { useTenants } from "./tenants/use-tenants";

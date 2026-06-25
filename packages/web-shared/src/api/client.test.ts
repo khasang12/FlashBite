@@ -9,6 +9,7 @@ import {
   getAdminOrders,
   getNearbyDrivers,
   getOrder,
+  getTenants,
   listOrders,
   placeOrder,
   reportLocation,
@@ -309,6 +310,15 @@ describe("api client", () => {
   it("getOrderDispatch passes through { status: null }", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: null }), { status: 200 }));
     expect(await getOrderDispatch("o-2")).toEqual({ status: null });
+  });
+
+  it("getTenants GETs the tenants read with Bearer and returns the catalog", async () => {
+    const rows = [{ slug: "berlin", displayName: "Berlin", lng: 13.405, lat: 52.52, status: "active" }];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+    const res = await getTenants();
+    expect(res).toEqual(rows);
+    expect(lastUrl()).toBe("/api/read/tenants");
+    expect(lastHeaders().Authorization).toBe("Bearer test-token");
   });
 
   it("refreshes once on 401, then retries the original request with the new token", async () => {

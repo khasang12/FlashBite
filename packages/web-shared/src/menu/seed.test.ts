@@ -20,4 +20,13 @@ describe("menu seed", () => {
   it("isolates tenants (tokyo menu differs from berlin)", () => {
     expect(getMenu("tokyo")).not.toEqual(getMenu("berlin"));
   });
+
+  it("getMenu falls back to the default menu for an unknown tenant", () => {
+    expect(getMenu("berlin").length).toBeGreaterThan(0);
+    expect(getMenu("nope-xyz")).toEqual(getMenu("berlin"));
+  });
+  it("getPopular returns only popular items, with the same fallback", () => {
+    expect(getPopular("nope-xyz").every((i) => i.popular)).toBe(true);
+    expect(getPopular("nope-xyz")).toEqual(getPopular("berlin"));
+  });
 });

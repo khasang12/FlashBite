@@ -73,7 +73,7 @@ flowchart LR
 - **Delivery tracking** — live delivery line on the customer page (incl. driver-location map) + Delivery column on the merchant dashboard (snapshot + tenant-wide SSE); driver identity stripped server-side.
 - **Verified-JWT tenancy + Postgres RLS** — `identity` issues RS256 tokens + JWKS; services derive `tenantId`/`role` from the verified token (no `X-Tenant-ID`); Row-Level Security on the write plane via a restricted `flashbite_app` role backstops app bugs.
 - **Identity hardening** — access token in memory, bootstrapped from a rotating one-time-use httpOnly refresh cookie (per-app scoped; reuse revokes the family); persisted, rotatable RS256 key, envelope-encrypted at rest.
-- **DB-backed tenant catalog** — `tenants` table is the runtime source of truth; cached `TenantCatalogService` + per-request `TenantGuard`; `GET /tenants`.
+- **DB-backed tenant catalog** — `tenants` table is the runtime source of truth; cached `TenantCatalogService` + per-request `TenantGuard`; `GET /tenants`. Frontends are catalog-driven via `useTenants()` (per-tenant maps/city-centers from catalog metadata; no hardcoded tenant constants in web-shared).
 - **Role-based access + operator console** — `@Roles` guard on the JWT `role`; an authenticated cross-tenant `/admin/*` API powers the admin dashboard.
 - **Polyglot persistence + real-time telemetry** — Postgres (event store), Mongo (read models + inbox), Redis Cluster (cache + geo, `tenant:{id}` hash tags); ephemeral driver GPS into per-tenant Redis geo, served via `GEOSEARCH`.
 - **Idempotency everywhere** — stable `eventId`, Mongo inbox dedup, Temporal `WorkflowId = tenantId:orderId`.
