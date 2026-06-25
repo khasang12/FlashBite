@@ -5,6 +5,8 @@ const READ_API = process.env.READ_API_ORIGIN ?? "http://localhost:3002";
 const IDENTITY_API = process.env.IDENTITY_API_ORIGIN ?? "http://localhost:3003";
 
 const nextConfig: NextConfig = {
+  // Scopes the identity refresh cookie to this app (so multiple frontends on localhost don't share fb_rt).
+  env: { NEXT_PUBLIC_FB_APP: "customer" },
   async rewrites() {
     return [
       { source: "/api/write/:path*", destination: `${WRITE_API}/:path*` },

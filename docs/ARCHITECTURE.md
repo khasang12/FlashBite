@@ -101,7 +101,7 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 |---|---|---|---|
 | `identity` | NestJS | 3003 | Authenticate seeded users (argon2id); issue short-lived **RS256** access tokens; publish public keys at `GET /.well-known/jwks.json`. Holds no sessions. |
 | `write-api` | NestJS | 3001 | Verify the Bearer JWT (tenant + role); place orders by rehydrating the Order aggregate and appending `OrderPlaced` at the expected version (event + outbox, atomically, under RLS); relay merchant accept/decline as a Temporal signal; relay driver dispatch commands (`POST /dispatch/:orderId/{accept,reject,pickup,deliver}`) as signals to the dispatch child workflow. `@Roles` gates: `customer` places, `merchant` accepts/declines, `driver` acts on dispatch. |
-| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch snapshot `GET /merchant/dispatch` + live SSE `GET /merchant/dispatch/stream` (both driver-identity-stripped); telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console. |
+| `read-api` | NestJS | 3002 | Verify the Bearer JWT; query orders (Mongo + Redis cache-aside); merchant SSE stream; driver online/offline toggle + dispatch reads + the per-driver `GET /driver/dispatch/stream` SSE; the tenant-wide merchant dispatch snapshot `GET /merchant/dispatch` + live SSE `GET /merchant/dispatch/stream` (both driver-identity-stripped); telemetry ingest + `GET /drivers/nearby`; the operator-only cross-tenant `/admin/*` console; the order driver-location read `GET /orders/:orderId/driver-location` (en-route only, coords-only). |
 | `outbox-poller` | TS worker | — | Polls the Postgres outbox and publishes envelopes to Kafka (`order-events`). At-least-once. |
 | `projection-worker` | TS worker | — | Consumes `order-events`, dedupes via a Mongo inbox, upserts the `orders` read model (version-guarded). |
 | `payments` | NestJS | 3004 | Bounded-context payments service. Exposes `POST /payments/authorize`, `POST /payments/:id/capture`, `POST /payments/:id/void`. Owns the `flashbite_payments` Postgres DB (separate from `flashbite_write`). Idempotent per `(tenantId, orderId)`. Deterministic decline rule: amounts above `AUTH_DECLINE_THRESHOLD` return `DECLINED`. Called exclusively by the saga; not exposed to frontends. |
@@ -278,6 +278,12 @@ flowchart LR
   Both non-driver reads are projected to a `DeliveryView` that **strips driver identity** server-side
   (`driverId`/`offeredDriverId` never reach the customer/merchant wire); the driver's own SSE keeps it.
   Outward-facing labels (`deliveryStatusLabel`), distinct from the driver-facing `dispatchStatusLabel`.
+- **Customer live driver-location map (Phase 3d-iii):** while an order is out for delivery
+  (DISPATCHED/PICKED_UP), the customer tracking page polls `GET /orders/:orderId/driver-location` and
+  shows the driver's live dot on a Mapbox map (web-customer `DriverMap`, recentering as it moves). The
+  endpoint resolves the order's driver server-side and returns only `{lng,lat}` from Redis `GEOPOS`
+  (driver identity never reaches the customer). No destination pin / route -- orders carry no delivery
+  coordinates; the map uses the tenant city center as reference.
 - **Avro + Schema Registry (Phase 3b):** Kafka payloads are **Avro-encoded**; envelope metadata
   travels in **headers** (not in the payload). Schemas are explicitly registered under **BACKWARD**
   compatibility — the registry rejects any incompatible evolution. Producers are **lookup-only**;
@@ -439,6 +445,31 @@ sequenceDiagram
   and runs the request inside an `AsyncLocalStorage` scope of `{tenantId, role, sub}`. There is **no
   `X-Tenant-ID` fallback** — a missing/invalid token is `401`. Mutations are gated by `@Roles`
   (`customer` places, `merchant` accepts/declines, `operator` for `/admin/*`).
+- **Access + refresh tokens (identity hardening):** login returns a short-lived RS256 access
+  token (JWT_ACCESS_TTL=900s, body `{accessToken,tokenType,expiresIn}`) plus a server-tracked,
+  rotating refresh token delivered ONLY as an httpOnly SameSite=Strict cookie (sha-256 hashed at
+  rest, never returned in a body). `POST /auth/refresh` rotates the RT (one-time-use; reusing a
+  rotated/revoked RT revokes the whole token family) and mints a fresh AT; `POST /auth/logout`
+  revokes it. The RSA signing key is persisted in `signing_keys`; JWKS publishes current+previous
+  so a deliberate rotation never breaks in-flight access tokens. Resource-server token verification
+  is unchanged (JWKS resolves multiple kids).
+- **Signing key encrypted at rest:** the signing key is the system's master credential — forging it
+  mints valid tokens for any tenant/role — so its private JWK is **envelope-encrypted** (AES-256-GCM)
+  under a KEK held outside the DB in `SIGNING_KEY_KEK` (base64, 32 bytes). A database-only leak
+  yields ciphertext that is useless without the KEK. The KEK is **required in production** (identity
+  refuses to boot without it); in dev it may be omitted, in which case the key is stored plaintext
+  with a loud warning. Legacy plaintext rows are read transparently and re-sealed once a KEK is set.
+  Losing the KEK is unrecoverable by design — rotate the key (issues a fresh one) to recover. A KMS/
+  HSM-backed signer (key never leaves the KMS) remains the stronger production option.
+  - **AT in memory, not localStorage:** the access token lives only in the web-shared auth store
+    (in-memory), so XSS cannot read it at rest. On load `AuthGate` runs a one-time `bootstrap()`
+    that exchanges the httpOnly refresh cookie for a fresh AT (silent re-login across reloads);
+    `authedFetch` also silently refreshes once on a 401 (single-flight) and retries.
+  - **Per-app refresh cookie:** browser cookies are scoped by host, not port, so the frontends on
+    `localhost:31xx` would otherwise share one cookie. Each app sends an `X-FB-App` header
+    (`NEXT_PUBLIC_FB_APP`, set in its `next.config`) and identity suffixes the cookie name
+    (`fb_rt_<app>`), keeping sessions isolated; absent the header it uses the base `fb_rt` name
+    (in prod each app is its own subdomain, so they are isolated anyway).
 - **Postgres Row-Level Security (write plane):** `event_store` + `outbox` have RLS enabled +
   forced; write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
   set `app.tenant_id` as the first statement of each write transaction (`withTenantTransaction`), so
@@ -485,10 +516,11 @@ Manrope, the API client, the **auth store** + `AuthGate`/`LoginForm`, `useOrderS
 CORS-free and the proxy forwards `Authorization` automatically).
 
 Every app is wrapped in an `AuthGate` (role-gated): no token shows a minimal `LoginForm` (email +
-password, with a one-click **demo-user quick-pick**); the token is stored in `localStorage`, and the
-API client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
-switcher anymore; "switch tenant" = log in as that tenant's user). No refresh/expiry machinery yet
-(a `401` bounces back to login — backlog).
+password, with a one-click **demo-user quick-pick**); the access token is held **in memory** (never
+localStorage) and `AuthGate` bootstraps it from the httpOnly refresh cookie on load, and the API
+client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
+switcher anymore; "switch tenant" = log in as that tenant's user). A `401` triggers one silent
+refresh + retry (see "Access + refresh tokens" above); only a failed refresh bounces to login.
 
 - **web-customer** (`customer@<tenant>.test`) — menu/cart/checkout, then a tracking page that polls
   until terminal status.

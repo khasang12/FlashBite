@@ -1,4 +1,4 @@
-# FlashBite identity service (port 3003) - login + JWKS.
+# FlashBite identity service (port 3003) - login, refresh/logout (AT/RT hardening), JWKS, tenants.
 # Works with the VS Code "REST Client" extension and JetBrains HTTP Client.
 # Prereqs:
 #   pnpm dev:identity  +  pnpm seed:tenants  +  pnpm seed:users
@@ -7,7 +7,11 @@
 @readUrl = http://localhost:3002
 @seedPassword = devpassword
 
-### Login as a berlin merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 3600 }.
+### Identity health - always open. Expect 200 { "status": "ok" }.
+GET {{identityUrl}}/health
+
+### Login as a berlin merchant. Expect 201 { accessToken, tokenType: "Bearer", expiresIn: 900 }.
+# Sets the httpOnly refresh cookie (fb_rt) used by /auth/refresh.
 # @name login
 POST {{identityUrl}}/auth/login
 Content-Type: application/json
@@ -31,13 +35,19 @@ Content-Type: application/json
 
 ###
 
-### JWKS - public keys used to verify tokens. Expect 200 { "keys": [ ... ] }.
-GET {{identityUrl}}/.well-known/jwks.json
+### Refresh the access token (sends the fb_rt cookie set by login). Expect a fresh accessToken.
+POST {{identityUrl}}/auth/refresh
 
 ###
 
-### Identity health - always open. Expect 200 { "status": "ok" }.
-GET {{identityUrl}}/health
+### Logout (revokes the refresh token / family).
+POST {{identityUrl}}/auth/logout
+
+###
+
+### JWKS - public keys used to verify access tokens. Expect 200 { "keys": [ ... ] }.
+# Current + previous kid are both published so in-flight ATs survive a key rotation.
+GET {{identityUrl}}/.well-known/jwks.json
 
 ###
 
