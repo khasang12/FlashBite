@@ -179,104 +179,35 @@ hard cut), **S2** Postgres RLS on the write plane, **S3** the cross-tenant opera
 
 ---
 
-## Quickstart (Phase 0)
+## Getting started
 
-Requires Docker Desktop and pnpm.
+Requires **Docker Desktop** and **pnpm**. Two commands take you from clone to a running stack:
 
 ```bash
 pnpm install
-pnpm infra:up          # Postgres, Mongo, Redpanda (+Console), Temporal, Redis Cluster
-pnpm infra:ps          # confirm health
+pnpm bootstrap   # cold start (run once, or after `pnpm infra:nuke`): infra up (waits for
+                 # Postgres + Redpanda health) -> DB migrate + Prisma client -> payments DB
+                 # -> seed tenants/users/drivers -> register Avro schemas
+pnpm dev         # start ALL 12 processes (8 services/workers + 4 frontends), labeled +
+                 # color-coded in one terminal; one Ctrl-C stops them all
 ```
 
-Run the de-risking spikes (proof each technology works in isolation):
+Narrower aggregates when you don't need the whole stack:
 
 ```bash
-pnpm --filter @flashbite/spikes kafka            # partition-key ordering
-pnpm --filter @flashbite/spikes temporal:worker  # (terminal 1) leave running
-pnpm --filter @flashbite/spikes temporal:run     # (terminal 2) SLA race
-pnpm --filter @flashbite/spikes outbox           # outbox round-trip
-pnpm --filter @flashbite/spikes redis            # cluster + tenant hash tags
+pnpm dev:services  # 8 backend services/workers (identity, write, read, payments, outbox,
+                   # projection, saga, telemetry)
+pnpm dev:web       # 4 Next.js frontends (customer, merchant, driver, admin)
 ```
 
-Observability UIs: Temporal at <http://localhost:8080>, Redpanda Console at
-<http://localhost:8085>. Full runbook: [`infra/README.md`](infra/README.md).
+> Docker infra stays up across code changes — only the `dev:*` processes need restarting (each
+> transpiles at boot, so a stale process serves old code). `pnpm dev` makes that one command.
 
-> **macOS note:** Redis runs as a single-container `grokzen/redis-cluster` (6-node)
-> on ports 7100–7105 — Docker Desktop for Mac can't expose discrete cluster nodes to the
-> host. Logically still a 6-node cluster; production would use discrete nodes.
-
----
-
-## Run the full app (Phase 1 + 2)
-
-**TL;DR — two commands.** Cold start once, then start everything in one terminal:
-
-```bash
-pnpm bootstrap   # one-time / after `infra:nuke`: infra up (--wait for health) + DB setup
-                 # + payments DB + seed tenants/users/drivers + register Avro schemas
-pnpm dev         # start ALL 12 processes (8 services/workers + 4 frontends) with
-                 # labeled, color-coded output; one Ctrl-C stops them all
-```
-
-Narrower aggregates (powered by `concurrently`):
-
-```bash
-pnpm dev:services  # just the 8 backend services/workers (identity, write, read, payments,
-                   # outbox, projection, saga, telemetry)
-pnpm dev:web       # just the 4 Next.js frontends (customer, merchant, driver, admin)
-```
-
-> Infra (Docker) stays up across code changes — only the `dev:*` processes need restarting,
-> since each transpiles at boot and otherwise serves stale code. `pnpm dev` makes that one command.
-
-<details>
-<summary>Manual / per-service equivalents (what the aggregates run)</summary>
-
-Bring up infra, then the order pipeline and whichever frontend(s) you want — each in its own
-terminal (or background them):
-
-```bash
-pnpm infra:up          # Postgres, Mongo, Redpanda (+Schema Registry :18081), Temporal, Redis Cluster
-pnpm db:deploy         # apply Prisma migrations (event store, outbox, users)
-pnpm payments:generate # (Phase 3c) generate Prisma client for flashbite_payments DB
-pnpm payments:db:create # (Phase 3c, one-time on existing volumes) create flashbite_payments DB
-pnpm payments:db:deploy # (Phase 3c) apply payments DB migrations
-pnpm seed:users        # (Phase 2a) seed demo users — role@tenant.test / devpassword (incl. drivers)
-pnpm seed:drivers      # (Phase 3d) re-seed just the driver accounts (drv-1..drv-4@<tenant>.test)
-pnpm register:schemas  # (Phase 3b, one-time) register Avro schemas with BACKWARD compatibility
-```
-
-> Phase 2 RLS: `pnpm db:deploy` also creates the restricted `flashbite_app` Postgres role.
-> write-api + saga-worker connect as it via `APP_DATABASE_URL` so Row-Level Security enforces
-> tenant isolation on `event_store`/`outbox`; the outbox-poller stays on the superuser
-> `DATABASE_URL` (it relays every tenant's events).
-
-```bash
-
-# order plane
-pnpm dev:write-api     # :3001  place orders, relay merchant accept/decline
-pnpm dev:read-api      # :3002  queries, SSE, telemetry ingest + nearby
-pnpm dev:outbox        # outbox  -> Kafka
-pnpm dev:projection    # Kafka   -> Mongo read model
-pnpm dev:saga          # Temporal order-lifecycle workflow (authorize → capture/void)
-pnpm dev:payments      # :3004  payments service (authorize / capture / void)
-pnpm dev:telemetry     # Kafka telemetry-streams -> Redis geo
-
-# frontends (each proxies /api/identity -> :3003, /api/read -> :3002, /api/write -> :3001)
-pnpm dev:identity      # :3003  JWT identity service — MUST be running for login
-pnpm dev:web-customer  # :3100  storefront + order tracking
-pnpm dev:web-merchant  # :3101  live order queue, accept/decline
-pnpm dev:web-driver    # :3102  driver job UI (online toggle + live dispatch offers) + nearby map (NEXT_PUBLIC_MAPBOX_TOKEN for tiles)
-pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
-```
-
-> **Login required (Phase 2 S4):** after `pnpm seed:users`, every UI requires a logged-in user.
-> Use seeded credentials (`role@tenant.test` / `devpassword`), e.g. `customer@berlin.test`,
-> `merchant@berlin.test`; drivers are seeded `drv-1@berlin.test … drv-4@berlin.test` (the JWT `sub`
-> is the dispatch `driverId`); the admin dashboard uses `operator@flashbite.test`.
-> `pnpm dev:identity` must be running — each frontend reaches it same-origin via the
-> `/api/identity/*` Next.js rewrite.
+**Log in** with seeded credentials (`role@tenant.test` / `devpassword`): e.g. `customer@berlin.test`,
+`merchant@berlin.test`, drivers `drv-1@berlin.test … drv-4@berlin.test` (the JWT `sub` is the dispatch
+`driverId`), and `operator@flashbite.test` for the admin console. Every UI requires a logged-in user;
+tenancy + role come from the **verified JWT** (`Authorization: Bearer`) — the old `X-Tenant-ID` header
+is no longer accepted. Maps use a public `NEXT_PUBLIC_MAPBOX_TOKEN` (a fallback panel renders without one).
 
 | Surface | URL | Surface | URL |
 |---|---|---|---|
@@ -286,34 +217,71 @@ pnpm dev:web-admin     # :3103  cross-tenant GMV/analytics + driver maps
 | Admin | <http://localhost:3103> | Temporal UI | <http://localhost:8080> |
 | identity | <http://localhost:3003> | Redpanda Console | <http://localhost:8085> |
 
-**New env vars (Phase 3c):**
+**Tests:** `pnpm test` (backend, needs infra up), `pnpm --filter @flashbite/web-shared test`
+(frontend units), `pnpm test:e2e:<customer|merchant|driver|admin>` (Playwright, needs the relevant
+services + identity up and users seeded).
+
+**Key env vars** (full list in `.env.example`):
 
 | Variable | Default / example | Purpose |
 |---|---|---|
 | `PAYMENTS_URL` | `http://localhost:3004` | Saga payments-client base URL |
 | `PAYMENTS_DATABASE_URL` | `postgresql://flashbite:…@localhost:5434/flashbite_payments` | Prisma DSN for the payments service |
 | `AUTH_DECLINE_THRESHOLD` | `100000` (pence) | Orders above this amount are deterministically declined (demo decline rule) |
+| `SIGNING_KEY_KEK` | base64 32 bytes (`openssl rand -base64 32`) | KEK that envelope-encrypts the signing key at rest; **required in production** |
 
-Tenancy + role come from the **verified JWT** (`Authorization: Bearer`) — the frontends obtain it at
-login and send it for you; the old `X-Tenant-ID` header is no longer accepted. Maps use a public
-`NEXT_PUBLIC_MAPBOX_TOKEN` (a fallback panel renders without one). **Tests:** `pnpm test`
-(backend, needs infra up), `pnpm --filter @flashbite/web-shared test` (frontend units), and
-`pnpm test:e2e:<customer|merchant|driver|admin>` (Playwright, needs the relevant services + identity
-up, users seeded).
+> **macOS note:** Redis runs as a single-container `grokzen/redis-cluster` (6-node) on ports
+> 7100–7105 — Docker Desktop for Mac can't expose discrete cluster nodes to the host. Logically
+> still a 6-node cluster; production would use discrete nodes.
+
+<details>
+<summary>Manual / per-service equivalents (what <code>bootstrap</code> and <code>dev</code> run)</summary>
+
+```bash
+pnpm infra:up           # Postgres, Mongo, Redpanda (+Schema Registry :18081), Temporal, Redis Cluster
+pnpm db:setup           # migrate event store/outbox/users (+ flashbite_app RLS role), generate
+                        # Prisma client, seed tenants + users
+pnpm payments:setup     # create + migrate flashbite_payments DB, generate its Prisma client
+pnpm seed:drivers       # (re)seed driver accounts drv-1..drv-4@<tenant>.test
+pnpm register:schemas   # register Avro schemas at BACKWARD compatibility (lookup-only producers)
+
+# order plane                            # frontends (proxy /api/{identity,read,write})
+pnpm dev:write-api    # :3001            pnpm dev:identity      # :3003  login + JWKS (required)
+pnpm dev:read-api     # :3002            pnpm dev:web-customer  # :3100
+pnpm dev:outbox       # outbox -> Kafka  pnpm dev:web-merchant  # :3101
+pnpm dev:projection   # Kafka -> Mongo   pnpm dev:web-driver    # :3102  (NEXT_PUBLIC_MAPBOX_TOKEN)
+pnpm dev:saga         # Temporal         pnpm dev:web-admin     # :3103
+pnpm dev:payments     # :3004
+pnpm dev:telemetry    # telemetry -> Redis geo
+```
+
+> **RLS:** `db:setup` creates the restricted `flashbite_app` Postgres role; write-api + saga-worker
+> connect as it via `APP_DATABASE_URL` so Row-Level Security enforces tenant isolation on
+> `event_store`/`outbox`. The outbox-poller stays on the superuser `DATABASE_URL` (it relays every tenant).
+</details>
+
+<details>
+<summary>Phase 0 de-risking spikes (throwaway proofs that each technology works in isolation)</summary>
+
+```bash
+pnpm --filter @flashbite/spikes kafka            # partition-key ordering
+pnpm --filter @flashbite/spikes temporal:worker  # (terminal 1) leave running
+pnpm --filter @flashbite/spikes temporal:run     # (terminal 2) SLA race
+pnpm --filter @flashbite/spikes outbox           # outbox round-trip
+pnpm --filter @flashbite/spikes redis            # cluster + tenant hash tags
+```
+
+Full infra runbook: [`infra/README.md`](infra/README.md).
+</details>
 
 ---
 
-## Driver telemetry (Phase 1c-ii)
+## Driver telemetry
 
-Ephemeral driver locations stream into Redis geo and are queryable per tenant:
+Ephemeral driver locations stream into Redis geo and are queryable per tenant. With the stack
+running (`pnpm dev`, or at least `dev:identity` + `dev:read-api` + `dev:telemetry`):
 
 ```bash
-pnpm infra:up
-pnpm dev:identity      # http://localhost:3003 (login + JWKS) — needed for a token
-pnpm dev:read-api      # http://localhost:3002 (location ingest + nearby query)
-pnpm dev:telemetry     # telemetry-streams → Redis geo
-pnpm seed:users        # role@tenant.test / devpassword
-
 # stream simulated GPS pings (random walk) until Ctrl+C — logs in for a driver JWT first
 ./scripts/stream-gps.sh
 # tune: DRIVER=drv-2 TENANT=tokyo INTERVAL=0.5 ./scripts/stream-gps.sh   # drivers seeded drv-1..drv-4
