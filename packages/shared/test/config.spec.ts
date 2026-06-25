@@ -31,4 +31,9 @@ describe("loadConfig auth/token + cookie defaults", () => {
     expect(cfg.rtCookieName).toBe("x");
     expect(cfg.rtCookiePath).toBe("/y");
   });
+
+  it("leaves signingKeyKek undefined by default and reads SIGNING_KEY_KEK when set", () => {
+    expect(loadConfig(base).signingKeyKek).toBeUndefined();
+    expect(loadConfig({ ...base, SIGNING_KEY_KEK: "abc" }).signingKeyKek).toBe("abc");
+  });
 });
