@@ -210,6 +210,29 @@ Observability UIs: Temporal at <http://localhost:8080>, Redpanda Console at
 
 ## Run the full app (Phase 1 + 2)
 
+**TL;DR — two commands.** Cold start once, then start everything in one terminal:
+
+```bash
+pnpm bootstrap   # one-time / after `infra:nuke`: infra up (--wait for health) + DB setup
+                 # + payments DB + seed tenants/users/drivers + register Avro schemas
+pnpm dev         # start ALL 12 processes (8 services/workers + 4 frontends) with
+                 # labeled, color-coded output; one Ctrl-C stops them all
+```
+
+Narrower aggregates (powered by `concurrently`):
+
+```bash
+pnpm dev:services  # just the 8 backend services/workers (identity, write, read, payments,
+                   # outbox, projection, saga, telemetry)
+pnpm dev:web       # just the 4 Next.js frontends (customer, merchant, driver, admin)
+```
+
+> Infra (Docker) stays up across code changes — only the `dev:*` processes need restarting,
+> since each transpiles at boot and otherwise serves stale code. `pnpm dev` makes that one command.
+
+<details>
+<summary>Manual / per-service equivalents (what the aggregates run)</summary>
+
 Bring up infra, then the order pipeline and whichever frontend(s) you want — each in its own
 terminal (or background them):
 
