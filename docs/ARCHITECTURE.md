@@ -112,8 +112,8 @@ and the driver app accepts/pickup/delivers it (see §3 and the Phase 3d-i/3d-ii 
 | `web-driver` | Next.js | 3102 | Driver job UI: go online/offline, receive live dispatch offers over SSE, accept/reject → pickup → deliver; plus the nearby-drivers Mapbox map (GPS streamed by a script). `driverId` = JWT `sub`. |
 | `web-admin` | Next.js | 3103 | Operator console (logs in as `operator@flashbite.test`): cross-tenant GMV/analytics charts, per-tenant driver maps, combined orders — served by the `/admin/*` endpoints. |
 
-**Shared packages:** `contracts` (event types, status/reason enums, `ROLES`/`TENANTS`/`CITY_CENTERS`,
-topic + key helpers, `OrderView`, `.avsc` Avro schemas + subject map, `PAYMENT_FAILED` cancel reason), `messaging` (Avro serde +
+**Shared packages:** `contracts` (event types, status/reason enums, `ROLES`, `Tenant=string`,
+`TenantView`, `GeoPoint`, `NearbyDriver`, topic + key helpers, `OrderView`, `.avsc` Avro schemas + subject map, `PAYMENT_FAILED` cancel reason), `messaging` (Avro serde +
 Schema Registry client + header encode/decode + publish/consume helpers + `register:schemas`
 script), `shared` (Prisma client + optional restricted-role URL, `withTenantTransaction` for the
 RLS GUC, the pure `Order` aggregate + `aggregate-store` load/append-with-expected-version, Mongo +
@@ -478,6 +478,13 @@ sequenceDiagram
   superuser connection — superusers bypass RLS, so the poller still relays every tenant.
 - **Postgres key model:** events/outbox carry `tenantId`; read-model `_id` is `tenantId:orderId`,
   inbox `_id` is `tenantId:consumer:eventId`.
+- **Tenant catalog (`tenants` table + cached `TenantCatalogService`):** the DB-backed catalog is the
+  runtime source of truth for the tenant list and metadata. `TenantGuard` validates each request's
+  `tenantId` against the active catalog (operator principal is exempt); adding or suspending a tenant
+  is a DB change honored within the cache TTL (`TENANT_CATALOG_TTL_MS`, default 60 s).
+  `GET /tenants` exposes the active catalog to authenticated callers. Identity seeds
+  (`seed:users`, `seed:drivers`) read active tenant slugs from the catalog table so the hardcoded
+  `TENANTS` constant is no longer needed.
 - **Kafka:** partition key `tenantId:orderId` preserves per-order ordering.
 - **Redis Cluster:** hash-tag keys co-locate a tenant's keys on one slot —
   `tenant:{id}:drivers:geo`, `tenant:{id}:order:<id>:view`. The brace wraps only the id so the key

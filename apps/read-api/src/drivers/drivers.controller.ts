@@ -60,6 +60,13 @@ export class DriversController {
     }));
   }
 
+  @Get(":driverId/online")
+  @Roles(ROLES.DRIVER)
+  async isOnline(@Param("driverId") driverId: string): Promise<{ driverId: string; online: boolean }> {
+    const online = (await this.redis.cluster.sismember(driverOnlineKey(currentTenant()), driverId)) === 1;
+    return { driverId, online };
+  }
+
   @Post(":driverId/online")
   @HttpCode(202)
   @Roles(ROLES.DRIVER)

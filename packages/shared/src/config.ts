@@ -28,6 +28,7 @@ export interface AppConfig {
   dispatchOfferTimeoutSeconds: number;
   dispatchMaxOffers: number;
   dispatchDeliveryTimeoutSeconds: number;
+  tenantCatalogTtlMs: number;
 }
 
 export const DEFAULT_TENANT_ID = "berlin";
@@ -88,5 +89,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     dispatchOfferTimeoutSeconds: Number(env.DISPATCH_OFFER_TIMEOUT_SECONDS ?? 30),
     dispatchMaxOffers: Number(env.DISPATCH_MAX_OFFERS ?? 5),
     dispatchDeliveryTimeoutSeconds: Number(env.DISPATCH_DELIVERY_TIMEOUT_SECONDS ?? 900),
+    tenantCatalogTtlMs: Number(env.TENANT_CATALOG_TTL_MS ?? 60000),
   };
 }

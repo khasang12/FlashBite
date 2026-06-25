@@ -5,7 +5,9 @@ import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { connectTemporal, RedisService, TemporalHandle } from "@flashbite/shared";
-import { CITY_CENTERS, driverGeoKey, driverOnlineKey, dispatchAggregateId } from "@flashbite/contracts";
+import { driverGeoKey, driverOnlineKey, dispatchAggregateId } from "@flashbite/contracts";
+
+const BERLIN_CENTER = { lng: 13.405, lat: 52.52 };
 import { startSagaWorker, SagaWorkerHandle } from "../../saga-worker/src/main";
 import { driverDispatchWorkflow } from "../../saga-worker/src/dispatch-workflow";
 import { AppModule } from "../src/app.module";
@@ -48,7 +50,7 @@ describe("write-api driver dispatch (e2e)", () => {
   it("driver accept -> pickup -> deliver via HTTP signals -> workflow result DELIVERED", async () => {
     const driverId = `drv-${randomUUID().slice(0, 8)}`;
     const orderId = randomUUID();
-    const c = CITY_CENTERS.berlin;
+    const c = BERLIN_CENTER;
 
     await redis.cluster.geoadd(driverGeoKey("berlin"), c.lng, c.lat, driverId);
     await redis.cluster.sadd(driverOnlineKey("berlin"), driverId);
