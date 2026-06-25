@@ -63,63 +63,23 @@ flowchart LR
 > **Full architecture (components, sequence diagrams, data model):**
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**Built (Phase 0 + 1 + 2 + 3a/3b/3c/3d):**
+**Built (Phases 0–3d):**
 
-- **CQRS + Event Sourcing + Transactional Outbox** — order events + outbox row committed in one
-  Postgres transaction (Prisma); forward-only, rebuildable Mongo projections.
-- **Order aggregate + ES hard mode (Phase 3a)** — `POST /orders` rehydrates the `Order` aggregate
-  from its event stream, enforces transition invariants, and writes with optimistic concurrency
-  (version check), replacing the prior blind-append approach. `pnpm rebuild:projection` replays
-  the full event store into the Mongo read model (ES rebuildability demonstrated end-to-end).
-- **Kafka (via Redpanda) — Confluent-Avro (Phase 3b)** — messages carry **Avro-encoded payloads**
-  (value) with envelope metadata (eventId, tenantId, eventType, …) in **Kafka headers**. Schemas
-  are governed by the **Schema Registry** at `localhost:18081`, registered via `pnpm
-  register:schemas` (BACKWARD compatibility enforced; producers are lookup-only, never auto-
-  register). Per-order partition keys (`tenantId:orderId`) preserve ordering.
-- **Temporal sagas + payments service (Phase 3c)** — one workflow per order: **authorize** payment (via the `payments` service :3004) → per-tenant SLA timer raced against the merchant-approval signal → **capture** (accept) or **void** (decline / SLA breach). A deterministic decline rule (`AUTH_DECLINE_THRESHOLD`, default 100 000) produces `PAYMENT_FAILED` → `OrderCancelled`. The payments service owns its own `flashbite_payments` database (Postgres, separate bounded context).
-- **Driver dispatch + job UI (Phase 3d)** — after an order is accepted, the saga `executeChild`s a
-  `driverDispatchWorkflow` that offers the job to the nearest **online + geolocated** driver, re-offering
-  the next-nearest on reject/timeout; a second event-sourced `DriverDispatch` aggregate (own
-  `dispatch-events` topic + read model) keeps the bounded context separate at the data layer. The driver
-  app goes online/offline and receives offers over a **per-driver-filtered SSE stream**
-  (`GET /driver/dispatch/stream`), accepting → pickup → deliver; `driverId` is the JWT `sub` (drivers
-  seeded `drv-1..drv-4`, so identity == dispatch id).
-- **Delivery tracking for customer + merchant (Phase 3d-iv)** — the customer order page shows a live
-  delivery line (Finding a driver → Driver assigned → Out for delivery → Delivered), and the merchant
-  dashboard shows a live **Delivery** column + detail line (seeded from a `GET /merchant/dispatch`
-  snapshot, then a tenant-wide dispatch SSE). Outward-facing labels; driver identity is stripped
-  server-side so it never reaches the customer/merchant wire.
-- **Polyglot persistence** — Postgres (event store), Mongo (read models + inbox), Redis Cluster
-  (cache + geo, `tenant:{id}` hash-tag co-location).
-- **Real-time telemetry** — ephemeral driver GPS (`DriverTelemetryStreamed` on `telemetry-streams`)
-  into per-tenant Redis geo indices, served via `GEOSEARCH` (`GET /drivers/nearby`); never
-  persisted.
-- **Idempotency & dedup** — at every hop: stable `eventId`, Mongo inbox pattern, Temporal
-  `WorkflowId = tenantId:orderId` reject-duplicate reuse policy.
-- **DB-backed tenant catalog + per-request validation** — the `tenants` table is the runtime source
-  of truth for active tenants; `TenantCatalogService` caches it (TTL-driven, fail-closed on cold
-  miss); `TenantGuard` validates every request's `tenantId` against the live catalog; `GET /tenants`
-  exposes it. Identity seeds read active slugs from the catalog, removing the hardcoded list.
-- **Identity & verified-JWT tenancy (Phase 2)** — a dedicated `identity` service issues **RS256**
-  access tokens and publishes a **JWKS** endpoint; write-api/read-api verify the token (signature +
-  `iss`/`aud`/`exp`) and derive `tenantId` + `role` from it. The trusted `X-Tenant-ID` header is
-  **gone** — isolation rests on cryptographic identity, not a client-supplied header.
-- **Identity hardening** — short-lived access tokens kept **in memory** (not localStorage) and bootstrapped on load from a rotating, one-time-use **httpOnly refresh-token cookie** (scoped per app so local frontends don't collide); reuse of a rotated token revokes the whole family; persisted + rotatable RS256 signing key.
-- **Postgres Row-Level Security (Phase 2)** — the write plane (`event_store` + `outbox`) is RLS-
-  enforced: write-api + saga-worker connect as a restricted, non-superuser `flashbite_app` role and
-  set `app.tenant_id` per transaction, so a tenant can never read or write another's rows even if
-  app code has a bug. The outbox-poller stays privileged (it relays every tenant).
-- **Role-based access + operator console (Phase 2)** — JWT `role` claim (`customer` / `merchant` /
-  `driver` / `admin` / `operator`) gated by a `@Roles` guard; an authenticated **cross-tenant
-  operator API** (`/admin/orders`, `/admin/drivers`, merged `/admin/orders/stream`) powers the admin
-  dashboard.
-- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin (operator
-  console), on a shared design system, with a minimal login (seeded users) sending `Authorization:
-  Bearer`.
-- **Multi-tenancy** — `tenantId` threaded through every tier (Kafka keys, Mongo ids, Redis hash
-  tags) and now **resolved from the verified JWT**, backstopped by Postgres RLS on the write plane.
+- **CQRS + Event Sourcing + transactional outbox** — order events + outbox row in one Postgres tx; forward-only, rebuildable Mongo projections (`pnpm rebuild:projection` replays the store).
+- **Order aggregate, ES hard mode** — `POST /orders` rehydrates the `Order` aggregate from its stream, enforces transition invariants, writes with optimistic concurrency (version check).
+- **Avro on Kafka (Redpanda)** — Avro payloads + envelope metadata in Kafka headers, governed by a Schema Registry at BACKWARD compatibility (lookup-only producers); `tenantId:orderId` keys preserve ordering.
+- **Temporal sagas + self-built payments** — one workflow per order: await confirm → authorize (`payments` :3004, own `flashbite_payments` DB) → SLA timer vs merchant approval → capture / void; deterministic decline → `PAYMENT_FAILED` → `OrderCancelled`.
+- **Event-sourced driver dispatch + job UI** — on accept, the saga runs `driverDispatchWorkflow` as a child, offering the job to the nearest online + geolocated driver (re-offer on reject/timeout) via a separate `DriverDispatch` aggregate; the driver app goes online/offline and accepts → pickup → deliver over a per-driver SSE stream.
+- **Delivery tracking** — live delivery line on the customer page (incl. driver-location map) + Delivery column on the merchant dashboard (snapshot + tenant-wide SSE); driver identity stripped server-side.
+- **Verified-JWT tenancy + Postgres RLS** — `identity` issues RS256 tokens + JWKS; services derive `tenantId`/`role` from the verified token (no `X-Tenant-ID`); Row-Level Security on the write plane via a restricted `flashbite_app` role backstops app bugs.
+- **Identity hardening** — access token in memory, bootstrapped from a rotating one-time-use httpOnly refresh cookie (per-app scoped; reuse revokes the family); persisted, rotatable RS256 key, envelope-encrypted at rest.
+- **DB-backed tenant catalog** — `tenants` table is the runtime source of truth; cached `TenantCatalogService` + per-request `TenantGuard`; `GET /tenants`.
+- **Role-based access + operator console** — `@Roles` guard on the JWT `role`; an authenticated cross-tenant `/admin/*` API powers the admin dashboard.
+- **Polyglot persistence + real-time telemetry** — Postgres (event store), Mongo (read models + inbox), Redis Cluster (cache + geo, `tenant:{id}` hash tags); ephemeral driver GPS into per-tenant Redis geo, served via `GEOSEARCH`.
+- **Idempotency everywhere** — stable `eventId`, Mongo inbox dedup, Temporal `WorkflowId = tenantId:orderId`.
+- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin, on a shared design system, Bearer auth.
 
-**Planned (later phases):** real Stripe integration (refund / webhook settlement / payment read model). Server-deriving the dispatch `driverId` from the JWT `sub` is backlogged. See `docs/superpowers/backlog.md`.
+**Planned:** frontend polish + observability (Phase 4); real Stripe (refund / webhook / read-model) is backlogged. See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -163,9 +123,8 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **3a** | Event-sourced Order aggregate (full ES, optimistic concurrency) | ✅ complete |
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
 | **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
-| **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) + delivery tracking on customer/merchant | ✅ complete |
-| 3 (remaining) | Customer live driver-location tracking (3d-iii), real Stripe (refund/webhook/read-model) | planned |
-| 4 | Frontend polish + observability story | planned |
+| **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) + customer live driver-location map (3d-iii) + delivery tracking on customer/merchant | ✅ complete |
+| **4** | Frontend polish + observability story | ⬜ next (only phase left) |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
 (projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga, **1c-ii** driver
