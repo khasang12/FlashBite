@@ -594,9 +594,6 @@ importers:
       jose:
         specifier: 5.9.6
         version: 5.9.6
-      pino:
-        specifier: ^9
-        version: 9.14.0
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
@@ -604,6 +601,9 @@ importers:
       '@types/express':
         specifier: 4.17.21
         version: 4.17.21
+      pino:
+        specifier: ^9
+        version: 9.14.0
 
   packages/web-shared:
     dependencies:
