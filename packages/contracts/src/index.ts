@@ -8,6 +8,7 @@ export interface EventEnvelope<T = unknown> {
   eventType: string;
   version: number;
   occurredAt: string;
+  correlationId: string;
   payload: T;
 }
 

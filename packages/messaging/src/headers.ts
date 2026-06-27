@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IHeaders } from "kafkajs";
 import type { EventEnvelope } from "@flashbite/contracts";
 
@@ -12,6 +13,7 @@ export function buildHeaders(meta: EnvelopeMeta): Record<string, string> {
     eventId: meta.eventId,
     version: String(meta.version),
     occurredAt: meta.occurredAt,
+    correlationId: meta.correlationId,
   };
 }
 
@@ -38,5 +40,6 @@ export function parseHeaders(headers: IHeaders | undefined): EnvelopeMeta {
     eventId: s("eventId"),
     version: Number(s("version") || 0),
     occurredAt: s("occurredAt"),
+    correlationId: s("correlationId") || randomUUID(),
   };
 }

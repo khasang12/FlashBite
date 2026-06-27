@@ -45,6 +45,7 @@ export interface AppendArgs {
   eventType: string;
   payload: unknown;
   topic?: string;
+  correlationId?: string;
 }
 
 /**
@@ -54,7 +55,7 @@ export interface AppendArgs {
  */
 export async function appendWithExpectedVersion(prisma: PrismaClient, args: AppendArgs): Promise<EventEnvelope> {
   const version = args.expectedVersion + 1;
-  const envelope = buildEnvelope({ tenantId: args.tenantId, eventType: args.eventType, version, payload: args.payload });
+  const envelope = buildEnvelope({ tenantId: args.tenantId, eventType: args.eventType, version, payload: args.payload, correlationId: args.correlationId });
   try {
     return await withTenantTransaction(prisma, args.tenantId, async (tx) => {
       await tx.eventStore.create({
