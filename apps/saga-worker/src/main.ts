@@ -106,8 +106,7 @@ async function main(): Promise<void> {
     registry,
   );
 
-  // eslint-disable-next-line no-console
-  console.log("saga-worker running");
+  log.info("saga-worker running");
 
   const shutdown = async (): Promise<void> => {
     await orderConsumer.stop();
@@ -121,8 +120,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    log.error({ err }, "fatal");
     process.exit(1);
   });
 }
