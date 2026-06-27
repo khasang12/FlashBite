@@ -1,9 +1,11 @@
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import type { Cluster } from "ioredis";
-import { createRedisCluster, loadConfig } from "@flashbite/shared";
+import { createLogger, createRedisCluster, loadConfig, runWithObsContext } from "@flashbite/shared";
 import { CONSUMER_GROUPS, TOPICS } from "@flashbite/contracts";
 import { createRegistry, readEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { applyTelemetry } from "./telemetry";
+
+const log = createLogger("telemetry-worker");
 
 export interface TelemetryConsumerHandle {
   stop: () => Promise<void>;
@@ -17,7 +19,10 @@ export async function runTelemetryConsumer(consumer: Consumer, cluster: Cluster,
     eachMessage: async ({ message }) => {
       const envelope = await readEnvelope(registry, message);
       if (!envelope) return;
-      await applyTelemetry(cluster, envelope);
+      await runWithObsContext(
+        { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
+        async () => { await applyTelemetry(cluster, envelope); log.info({ eventType: envelope.eventType }, "consumed"); },
+      );
     },
   });
   return { stop: async () => { await consumer.disconnect(); } };
@@ -31,8 +36,7 @@ async function main(): Promise<void> {
   const registry = createRegistry(config.schemaRegistryUrl);
   const handle = await runTelemetryConsumer(consumer, cluster, registry);
 
-  // eslint-disable-next-line no-console
-  console.log("telemetry-worker running");
+  log.info("telemetry-worker running");
   const shutdown = async (): Promise<void> => {
     await handle.stop();
     await cluster.quit();
@@ -44,8 +48,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    log.error(err, "fatal");
     process.exit(1);
   });
 }

@@ -1,6 +1,8 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
-import { loadConfig } from "@flashbite/shared";
+import { createLogger, loadConfig, runWithObsContext } from "@flashbite/shared";
+
+const log = createLogger("read-api");
 import {
   CONSUMER_GROUPS,
   DISPATCH_STATUS,
@@ -66,12 +68,19 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
       eachMessage: async ({ topic, message }) => {
         const envelope = await readEnvelope(registry, message);
         if (!envelope) return;
-        if (topic === TOPICS.DISPATCH_EVENTS) {
-          const view = toDispatchView(envelope);
-          if (view) this.dispatchStream.publish(envelope.tenantId, view);
-          return;
-        }
-        this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
+        await runWithObsContext(
+          { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
+          async () => {
+            if (topic === TOPICS.DISPATCH_EVENTS) {
+              const view = toDispatchView(envelope);
+              if (view) this.dispatchStream.publish(envelope.tenantId, view);
+              log.info({ eventType: envelope.eventType }, "consumed");
+              return;
+            }
+            this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
+            log.info({ eventType: envelope.eventType }, "consumed");
+          },
+        );
       },
     });
   }
