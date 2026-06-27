@@ -1,9 +1,10 @@
 import { Kafka, logLevel } from "kafkajs";
-import { PrismaService, loadConfig } from "@flashbite/shared";
+import { PrismaService, loadConfig, createLogger } from "@flashbite/shared";
 import { createRegistry } from "@flashbite/messaging";
 import { pollOnce } from "./poller";
 
 const POLL_INTERVAL_MS = Number(process.env.OUTBOX_POLL_INTERVAL_MS ?? 1000);
+const log = createLogger("outbox-poller");
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -19,8 +20,7 @@ async function main(): Promise<void> {
   await producer.connect();
   const registry = createRegistry(config.schemaRegistryUrl);
 
-  // eslint-disable-next-line no-console
-  console.log("outbox-poller running");
+  log.info("outbox-poller running");
   let running = true;
   const shutdown = async (): Promise<void> => {
     running = false;
@@ -38,7 +38,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
+  log.error({ err }, "fatal");
   process.exit(1);
 });
