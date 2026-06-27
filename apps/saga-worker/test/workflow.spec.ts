@@ -59,7 +59,7 @@ describe("orderLifecycleWorkflow", () => {
 
   const baseArgs = (orderId: string, totalAmount = 1200) => ({
     tenantId: "berlin", orderId, totalAmount, slaSeconds: 300, confirmSeconds: 300,
-    offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300,
+    offerTimeoutSeconds: 2, maxOffers: 1, deliverySeconds: 300, correlationId: "test-corr",
   });
 
   it("captures + accepts, then runs the dispatch child and maps its result (no driver -> DISPATCH_FAILED)", async () => {

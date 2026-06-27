@@ -20,6 +20,7 @@ export function createDispatchActivities(prisma: PrismaClient, redis: Cluster) {
     orderId: string,
     eventType: string,
     build: (s: DispatchState) => unknown,
+    correlationId?: string,
   ): Promise<void> {
     const aggregateId = dispatchAggregateId(orderId);
     const { state, version } = await loadAggregate(prisma, { tenantId, aggregateId }, foldDispatch, INITIAL_DISPATCH_STATE);
@@ -32,7 +33,7 @@ export function createDispatchActivities(prisma: PrismaClient, redis: Cluster) {
     }
     await appendWithExpectedVersion(prisma, {
       tenantId, aggregateType: AGGREGATE_TYPES.DISPATCH, aggregateId,
-      expectedVersion: version, eventType, payload, topic: TOPICS.DISPATCH_EVENTS,
+      expectedVersion: version, eventType, payload, topic: TOPICS.DISPATCH_EVENTS, correlationId,
     });
   }
 
@@ -59,20 +60,20 @@ export function createDispatchActivities(prisma: PrismaClient, redis: Cluster) {
     async clearBusyActivity(tenantId: string, driverId: string): Promise<void> {
       await redis.srem(driverBusyKey(tenantId), driverId);
     },
-    async recordDriverOfferedActivity(tenantId: string, orderId: string, driverId: string): Promise<void> {
-      await append(tenantId, orderId, EVENT_TYPES.DRIVER_OFFERED, (s) => offer(s, orderId, driverId));
+    async recordDriverOfferedActivity(tenantId: string, orderId: string, driverId: string, correlationId?: string): Promise<void> {
+      await append(tenantId, orderId, EVENT_TYPES.DRIVER_OFFERED, (s) => offer(s, orderId, driverId), correlationId);
     },
-    async recordDispatchAcceptedActivity(tenantId: string, orderId: string, driverId: string): Promise<void> {
-      await append(tenantId, orderId, EVENT_TYPES.DISPATCH_ACCEPTED, (s) => acceptOffer(s, orderId, driverId));
+    async recordDispatchAcceptedActivity(tenantId: string, orderId: string, driverId: string, correlationId?: string): Promise<void> {
+      await append(tenantId, orderId, EVENT_TYPES.DISPATCH_ACCEPTED, (s) => acceptOffer(s, orderId, driverId), correlationId);
     },
-    async recordOrderPickedUpActivity(tenantId: string, orderId: string): Promise<void> {
-      await append(tenantId, orderId, EVENT_TYPES.ORDER_PICKED_UP, (s) => pickup(s, orderId));
+    async recordOrderPickedUpActivity(tenantId: string, orderId: string, correlationId?: string): Promise<void> {
+      await append(tenantId, orderId, EVENT_TYPES.ORDER_PICKED_UP, (s) => pickup(s, orderId), correlationId);
     },
-    async recordOrderDeliveredActivity(tenantId: string, orderId: string): Promise<void> {
-      await append(tenantId, orderId, EVENT_TYPES.ORDER_DELIVERED, (s) => deliver(s, orderId));
+    async recordOrderDeliveredActivity(tenantId: string, orderId: string, correlationId?: string): Promise<void> {
+      await append(tenantId, orderId, EVENT_TYPES.ORDER_DELIVERED, (s) => deliver(s, orderId), correlationId);
     },
-    async recordDispatchFailedActivity(tenantId: string, orderId: string, reason: string): Promise<void> {
-      await append(tenantId, orderId, EVENT_TYPES.DISPATCH_FAILED, (s) => fail(s, orderId, reason));
+    async recordDispatchFailedActivity(tenantId: string, orderId: string, reason: string, correlationId?: string): Promise<void> {
+      await append(tenantId, orderId, EVENT_TYPES.DISPATCH_FAILED, (s) => fail(s, orderId, reason), correlationId);
     },
   };
 }

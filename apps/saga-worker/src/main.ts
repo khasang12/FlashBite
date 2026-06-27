@@ -3,7 +3,7 @@ import { Worker, NativeConnection } from "@temporalio/worker";
 import { WorkflowIdReusePolicy } from "@temporalio/client";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import { PrismaClient } from "@prisma/client";
-import { connectTemporal, loadConfig, requireAppDatabaseUrl, createRedisCluster, type TemporalHandle } from "@flashbite/shared";
+import { connectTemporal, loadConfig, requireAppDatabaseUrl, createRedisCluster, createLogger, runWithObsContext, type TemporalHandle } from "@flashbite/shared";
 import {
   CONSUMER_GROUPS,
   EVENT_TYPES,
@@ -48,6 +48,8 @@ export async function startSagaWorker(): Promise<SagaWorkerHandle> {
   };
 }
 
+const log = createLogger("saga-worker");
+
 /** Kafka consumer: start one workflow per OrderPlaced. Returns a stop handle. */
 export async function startOrderConsumer(
   consumer: Consumer,
@@ -67,16 +69,19 @@ export async function startOrderConsumer(
       if (!envelope) return;
       if (envelope.eventType !== EVENT_TYPES.ORDER_PLACED) return;
       const p = envelope.payload as OrderPlacedPayload;
-      try {
-        await temporal.client.workflow.start(ORDER_SAGA.WORKFLOW_TYPE, {
-          taskQueue: ORDER_SAGA.TASK_QUEUE,
-          workflowId: `${envelope.tenantId}:${p.orderId}`,
-          workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-          args: [{ tenantId: envelope.tenantId, orderId: p.orderId, totalAmount: p.totalAmount, slaSeconds, confirmSeconds, offerTimeoutSeconds, maxOffers, deliverySeconds }],
-        });
-      } catch (err) {
-        if (!/already started|WorkflowExecutionAlreadyStarted/i.test(String(err))) throw err;
-      }
+      await runWithObsContext({ correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId }, async () => {
+        log.info({ correlationId: envelope.correlationId, tenantId: envelope.tenantId, orderId: p.orderId }, "saga-worker: starting order lifecycle workflow");
+        try {
+          await temporal.client.workflow.start(ORDER_SAGA.WORKFLOW_TYPE, {
+            taskQueue: ORDER_SAGA.TASK_QUEUE,
+            workflowId: `${envelope.tenantId}:${p.orderId}`,
+            workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+            args: [{ tenantId: envelope.tenantId, orderId: p.orderId, totalAmount: p.totalAmount, slaSeconds, confirmSeconds, offerTimeoutSeconds, maxOffers, deliverySeconds, correlationId: envelope.correlationId }],
+          });
+        } catch (err) {
+          if (!/already started|WorkflowExecutionAlreadyStarted/i.test(String(err))) throw err;
+        }
+      });
     },
   });
   return {

@@ -23,7 +23,7 @@ export function createActivities(prisma: PrismaClient) {
     async voidPaymentActivity(tenantId: string, orderId: string): Promise<void> {
       await voidPayment(loadConfig().paymentsUrl, tenantId, orderId);
     },
-    async recordOrderAcceptedActivity(tenantId: string, orderId: string): Promise<void> {
+    async recordOrderAcceptedActivity(tenantId: string, orderId: string, correlationId?: string): Promise<void> {
       const { state, version } = await loadAggregate(prisma, { tenantId, aggregateId: orderId }, foldOrder, INITIAL_ORDER_STATE);
       let payload;
       try {
@@ -34,10 +34,10 @@ export function createActivities(prisma: PrismaClient) {
       }
       await appendWithExpectedVersion(prisma, {
         tenantId, aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId,
-        expectedVersion: version, eventType: EVENT_TYPES.ORDER_ACCEPTED, payload,
+        expectedVersion: version, eventType: EVENT_TYPES.ORDER_ACCEPTED, payload, correlationId,
       });
     },
-    async recordOrderCancelledActivity(tenantId: string, orderId: string, reason: string): Promise<void> {
+    async recordOrderCancelledActivity(tenantId: string, orderId: string, reason: string, correlationId?: string): Promise<void> {
       const { state, version } = await loadAggregate(prisma, { tenantId, aggregateId: orderId }, foldOrder, INITIAL_ORDER_STATE);
       let payload;
       try {
@@ -48,7 +48,7 @@ export function createActivities(prisma: PrismaClient) {
       }
       await appendWithExpectedVersion(prisma, {
         tenantId, aggregateType: AGGREGATE_TYPES.ORDER, aggregateId: orderId,
-        expectedVersion: version, eventType: EVENT_TYPES.ORDER_CANCELLED, payload,
+        expectedVersion: version, eventType: EVENT_TYPES.ORDER_CANCELLED, payload, correlationId,
       });
     },
   };

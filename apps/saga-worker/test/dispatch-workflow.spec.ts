@@ -37,7 +37,7 @@ describe("driverDispatchWorkflow", () => {
     });
     return worker.runUntil(fn);
   }
-  const args = (orderId: string) => ({ tenantId: "berlin", orderId, offerTimeoutSeconds: 30, maxOffers: 5 });
+  const args = (orderId: string) => ({ tenantId: "berlin", orderId, offerTimeoutSeconds: 30, maxOffers: 5, correlationId: "test-corr" });
 
   it("accept -> pickup -> deliver = DELIVERED", async () => {
     calls.length = 0; queue = ["d1"];
@@ -92,7 +92,7 @@ describe("driverDispatchWorkflow", () => {
     const result = await run(async () => {
       const h = await env.client.workflow.start(driverDispatchWorkflow, {
         taskQueue: "test-dispatch", workflowId: `disp-deliverto-${Date.now()}`,
-        args: [{ tenantId: "berlin", orderId: "o5", offerTimeoutSeconds: 30, maxOffers: 5, deliverySeconds: 60 }],
+        args: [{ tenantId: "berlin", orderId: "o5", offerTimeoutSeconds: 30, maxOffers: 5, deliverySeconds: 60, correlationId: "test-corr" }],
       });
       await h.signal(dispatchAcceptSignal, "d1"); // accept, but never pickup -> delivery times out
       return h.result();
