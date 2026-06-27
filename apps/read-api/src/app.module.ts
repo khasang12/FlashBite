@@ -1,7 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { AuthMiddleware, TokenVerifier, TenantGuard } from "@flashbite/tenant-context";
-import { PrismaService, TenantCatalogService } from "@flashbite/shared";
+import { AuthMiddleware, CorrelationMiddleware, TokenVerifier, TenantGuard } from "@flashbite/tenant-context";
+import { createLogger, PrismaService, TenantCatalogService } from "@flashbite/shared";
 import { HealthController } from "./health.controller";
 import { OrdersModule } from "./orders/orders.module";
 import { SseModule } from "./sse/sse.module";
@@ -18,10 +18,12 @@ import { TenantsModule } from "./tenants/tenants.module";
     PrismaService,
     { provide: TenantCatalogService, useFactory: (p: PrismaService) => new TenantCatalogService(p), inject: [PrismaService] },
     { provide: APP_GUARD, useFactory: (catalog: TenantCatalogService) => new TenantGuard(catalog), inject: [TenantCatalogService] },
+    { provide: CorrelationMiddleware, useFactory: () => new CorrelationMiddleware(createLogger("read-api")) },
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationMiddleware).forRoutes("*");
     consumer.apply(AuthMiddleware).exclude("health").forRoutes("*");
   }
 }
