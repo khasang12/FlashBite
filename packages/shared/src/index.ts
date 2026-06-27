@@ -12,3 +12,5 @@ export * from "./aggregate-store";
 export * from "./order-aggregate";
 export { foldDispatch, offer, acceptOffer, pickup, deliver, fail, INITIAL_DISPATCH_STATE, type DispatchState } from "./dispatch-aggregate";
 export * from "./tenant-catalog";
+export { createLogger } from "./logger";
+export { runWithObsContext, getObsContext, newCorrelationId, obsLogFields, type ObsContext } from "./obs-context";
