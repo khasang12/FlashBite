@@ -188,6 +188,7 @@ services + identity up and users seeded).
 | `PAYMENTS_DATABASE_URL` | `postgresql://flashbite:…@localhost:5434/flashbite_payments` | Prisma DSN for the payments service |
 | `AUTH_DECLINE_THRESHOLD` | `100000` (pence) | Orders above this amount are deterministically declined (demo decline rule) |
 | `SIGNING_KEY_KEK` | base64 32 bytes (`openssl rand -base64 32`) | KEK that envelope-encrypts the signing key at rest; **required in production** |
+| `LOG_LEVEL` | `info` | pino log level for all services (`trace`/`debug`/`info`/`warn`/`error`) |
 
 > **macOS note:** Redis runs as a single-container `grokzen/redis-cluster` (6-node) on ports
 > 7100–7105 — Docker Desktop for Mac can't expose discrete cluster nodes to the host. Logically
@@ -260,6 +261,39 @@ Telemetry is **ephemeral** — Redis geospatial only, never Postgres / the event
 Per-tenant isolation holds on both write and read (`tenant:{id}:drivers:geo`), scoped by the
 token's tenant. Manual requests live in [`apps/write-api/requests.http`](apps/write-api/requests.http); see
 [`docs/superpowers/plans/phase-1c-ii-verification.md`](docs/superpowers/plans/phase-1c-ii-verification.md).
+
+---
+
+## Observability (Phase 4a)
+
+Every service emits **structured JSON logs** to stdout via [pino](https://github.com/pinojs/pino).
+Set `LOG_LEVEL` in `.env` to control verbosity (default `info`).
+
+Every log line carries at least `service` and `correlationId`. When a tenant context is active the
+line also carries `tenantId`; event-processing lines add `eventId`.
+
+**Tracing a single order end-to-end** — pick up the `x-correlation-id` header echoed on the HTTP
+response, then grep it across all `pnpm dev` output:
+
+```bash
+# 1. place an order and capture the correlation id
+CORR=$(curl -s -XPOST http://localhost:3001/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orderId":"<uuid>","customerId":"c-1","items":[{"sku":"pizza","qty":1,"price":1200}],"totalAmount":1200}' \
+  -i | grep -i x-correlation-id | awk '{print $2}' | tr -d '\r')
+
+# 2. grep that id across all terminal output (pipe all dev services through tee first, or search logs)
+grep "$CORR" /tmp/flashbite-*.log
+```
+
+Each hop appends a structured field so you can follow the id from the HTTP request log
+(write-api) → outbox poll (outbox-poller) → Kafka consume (projection-worker / saga-worker /
+telemetry-worker) without any trace-collection infrastructure.
+
+**Live UIs** (stack must be running):
+- [Temporal :8080](http://localhost:8080) — saga workflow timelines, activity histories, signals
+- [Redpanda Console :8085](http://localhost:8085) — Kafka topic messages, consumer group offsets
 
 ---
 

@@ -1,5 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
-import { CorrelationMiddleware } from "@flashbite/tenant-context";
+import { CorrelationMiddleware, CORRELATION_LOGGER } from "@flashbite/tenant-context";
 import { createLogger } from "@flashbite/shared";
 import { HealthController } from "./health.controller";
 import { AuthModule } from "./auth/auth.module";
@@ -8,7 +8,8 @@ import { AuthModule } from "./auth/auth.module";
   imports: [AuthModule],
   controllers: [HealthController],
   providers: [
-    { provide: CorrelationMiddleware, useFactory: () => new CorrelationMiddleware(createLogger("identity")) },
+    { provide: CORRELATION_LOGGER, useFactory: () => createLogger("identity") },
+    CorrelationMiddleware,
   ],
 })
 export class AppModule implements NestModule {

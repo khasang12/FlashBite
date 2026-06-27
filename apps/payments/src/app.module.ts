@@ -1,5 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
-import { AuthMiddleware, CorrelationMiddleware, TokenVerifier } from "@flashbite/tenant-context";
+import { AuthMiddleware, CorrelationMiddleware, CORRELATION_LOGGER, TokenVerifier } from "@flashbite/tenant-context";
 import { createLogger } from "@flashbite/shared";
 import { HealthController } from "./health.controller";
 import { PaymentsModule } from "./payments.module";
@@ -9,7 +9,8 @@ import { PaymentsModule } from "./payments.module";
   controllers: [HealthController],
   providers: [
     TokenVerifier,
-    { provide: CorrelationMiddleware, useFactory: () => new CorrelationMiddleware(createLogger("payments")) },
+    { provide: CORRELATION_LOGGER, useFactory: () => createLogger("payments") },
+    CorrelationMiddleware,
   ],
 })
 export class AppModule implements NestModule {
