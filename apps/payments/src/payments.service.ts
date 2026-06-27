@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
 import { PAYMENT_STATUS, type PaymentStatus } from "@flashbite/contracts";
+import { createLogger } from "@flashbite/shared";
 import { PaymentsPrismaService } from "./payments-prisma.service";
 import { decideAuthorize, nextOnCapture, nextOnVoid, IllegalTransitionError } from "./payment-rules";
+
+const log = createLogger("payments");
 
 export interface PaymentOutcome {
   paymentId: string;
@@ -20,8 +23,7 @@ export class PaymentsService {
     declineThreshold: number,
     idempotencyKey: string,
   ): Promise<PaymentOutcome> {
-    // eslint-disable-next-line no-console
-    console.log(`[authorize] ${idempotencyKey} tenant=${tenantId} order=${orderId} amount=${amount}`);
+    log.info({ tenantId, orderId, amount, idempotencyKey }, "authorize");
     const existing = await this.prisma.payment.findUnique({ where: { tenantId_orderId: { tenantId, orderId } } });
     if (existing) {
       return { paymentId: existing.id, outcome: existing.status === PAYMENT_STATUS.DECLINED ? "declined" : "authorized" };
@@ -40,8 +42,7 @@ export class PaymentsService {
   }
 
   async capture(tenantId: string, orderId: string, idempotencyKey: string): Promise<PaymentOutcome> {
-    // eslint-disable-next-line no-console
-    console.log(`[capture] ${idempotencyKey} tenant=${tenantId} order=${orderId}`);
+    log.info({ tenantId, orderId, idempotencyKey }, "capture");
     return this.transition(tenantId, orderId, nextOnCapture, "capturedAt", "captured");
   }
 
@@ -53,8 +54,7 @@ export class PaymentsService {
   }
 
   async void(tenantId: string, orderId: string, idempotencyKey: string): Promise<PaymentOutcome> {
-    // eslint-disable-next-line no-console
-    console.log(`[void] ${idempotencyKey} tenant=${tenantId} order=${orderId}`);
+    log.info({ tenantId, orderId, idempotencyKey }, "void");
     return this.transition(tenantId, orderId, nextOnVoid, "voidedAt", "voided");
   }
 

@@ -1,8 +1,10 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
-import { requireAppDatabaseUrl } from "@flashbite/shared";
+import { requireAppDatabaseUrl, createLogger } from "@flashbite/shared";
 import { AppModule } from "./app.module";
+
+const log = createLogger("write-api");
 
 async function bootstrap(): Promise<void> {
   requireAppDatabaseUrl(); // fail loud if the restricted RLS role isn't configured
@@ -10,8 +12,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   const port = Number(process.env.WRITE_API_PORT ?? 3001);
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`write-api listening on ${port}`);
+  log.info(`write-api listening on ${port}`);
 }
 
 bootstrap();
