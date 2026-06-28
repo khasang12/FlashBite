@@ -16,12 +16,13 @@ const columns: ColumnDef<NearbyDriver>[] = [
   },
 ];
 
-export function NearbyTable({ data }: { data: NearbyDriver[] }) {
+export function NearbyTable({ data, loading }: { data: NearbyDriver[]; loading: boolean }) {
   return (
     <DataTable
       columns={columns}
       data={data}
       initialSorting={[{ id: "distance", desc: false }]}
+      loading={loading}
       emptyMessage="No nearby drivers."
     />
   );

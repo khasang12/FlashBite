@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { AuthGate, Input, useTenants, ErrorState } from "@flashbite/web-shared";
+import { AuthGate, Input, useTenants, ErrorState, Skeleton } from "@flashbite/web-shared";
 import { useAdminData } from "@/hooks/use-admin-data";
 import { AdminStream } from "@/components/tenant-stream";
 import { StatCards } from "@/components/stat-cards";
@@ -9,7 +9,7 @@ import { TenantMap } from "@/components/tenant-map";
 import { AdminOrdersTable } from "@/components/admin-orders-table";
 
 function Dashboard() {
-  const { orders, driversByTenant, errors, handleEvent, resync } = useAdminData();
+  const { orders, driversByTenant, errors, handleEvent, resync, loading } = useAdminData();
   const { tenants, loading: tenantsLoading } = useTenants();
   const [filter, setFilter] = useState("");
 
@@ -46,7 +46,10 @@ function Dashboard() {
 
         <section aria-label="Driver maps" className="mt-6 grid gap-4 md:grid-cols-2">
           {tenantsLoading && tenants.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Loading tenants…</div>
+            <>
+              <Skeleton className="h-64 w-full rounded-xl" />
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </>
           ) : (
             tenants.map((t) => (
               <TenantMap key={t.slug} tenant={t.slug} center={{ lng: t.lng, lat: t.lat }} drivers={driversByTenant[t.slug] ?? []} />
@@ -61,7 +64,7 @@ function Dashboard() {
             </div>
             <Input placeholder="Search tenant / order / customer" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Search orders" className="max-w-xs" />
           </div>
-          <AdminOrdersTable data={orders} globalFilter={filter} />
+          <AdminOrdersTable data={orders} globalFilter={filter} loading={loading} />
         </section>
       </main>
     </div>

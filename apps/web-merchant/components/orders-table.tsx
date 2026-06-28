@@ -25,12 +25,13 @@ function buildColumns(dispatches: DispatchMap): ColumnDef<OrderView>[] {
 }
 
 export function OrdersTable({
-  data, globalFilter, dispatches, onRowClick,
+  data, globalFilter, dispatches, onRowClick, loading,
 }: {
   data: OrderView[];
   globalFilter: string;
   dispatches: DispatchMap;
   onRowClick: (o: OrderView) => void;
+  loading: boolean;
 }) {
   return (
     <DataTable
@@ -39,6 +40,7 @@ export function OrdersTable({
       initialSorting={[{ id: "time", desc: true }]}
       globalFilter={globalFilter}
       onRowClick={onRowClick}
+      loading={loading}
     />
   );
 }

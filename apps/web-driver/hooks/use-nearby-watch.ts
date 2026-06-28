@@ -11,9 +11,10 @@ const RADIUS_KM = 5;
 export interface NearbyState {
   nearby: NearbyDriver[];
   reconnecting: boolean;
+  loading: boolean;
 }
 
-const IDLE: NearbyState = { nearby: [], reconnecting: false };
+const IDLE: NearbyState = { nearby: [], reconnecting: false, loading: false };
 
 // Read-only watcher: GPS pings are streamed externally (scripts/stream-gps.sh).
 // While `watching`, this polls getNearbyDrivers around the tenant city center
@@ -47,10 +48,13 @@ export function useNearbyWatch(
       setState((prev) => ({
         nearby: fetched ?? prev.nearby,
         reconnecting: fetched === null,
+        loading: false,
       }));
       timer = setTimeout(() => void tick(), TICK_MS);
     };
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState((prev) => ({ ...prev, loading: prev.nearby.length === 0 })); // entering watch: skeleton until first poll
     void tick();
     return () => {
       active = false;

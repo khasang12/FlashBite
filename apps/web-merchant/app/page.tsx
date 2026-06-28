@@ -24,11 +24,12 @@ function MerchantDashboard() {
   const [status, setStatus] = useState<string>("ALL");
   const [selected, setSelected] = useState<OrderView | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const resync = useCallback(() => {
     listOrders()
-      .then((o) => { setOrders(o); setLoadError(false); })
-      .catch(() => setLoadError(true));
+      .then((o) => { setOrders(o); setLoadError(false); setLoading(false); })
+      .catch(() => { setLoadError(true); setLoading(false); });
   }, []);
 
   useEffect(() => { resync(); }, [resync]);
@@ -88,7 +89,7 @@ function MerchantDashboard() {
             className="mx-auto mt-10 max-w-sm"
           />
         ) : (
-          <OrdersTable data={visible} globalFilter={filter} dispatches={dispatches} onRowClick={setSelected} />
+          <OrdersTable data={visible} globalFilter={filter} dispatches={dispatches} onRowClick={setSelected} loading={loading} />
         )}
       </main>
       <OrderDetailSheet order={current} dispatch={current ? dispatches[current.orderId] ?? null : null} onClose={() => setSelected(null)} />
