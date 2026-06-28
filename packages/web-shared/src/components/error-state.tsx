@@ -75,7 +75,7 @@ export function ErrorState({
         {icon ?? <AlertTriangle className="h-8 w-8" />}
       </span>
       <div className="space-y-1">
-        <p className="text-base font-bold">{title}</p>
+        <h2 className="text-base font-bold">{title}</h2>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       {actionEl}
