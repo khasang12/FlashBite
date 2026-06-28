@@ -1,13 +1,15 @@
 # FlashBite — Architecture (what's built so far)
 
-This document describes the system **as currently implemented** (Phase 0 + Phase 1 + Phase 2 +
-Phase 3a + Phase 3b + Phase 3c + Phase 3d: the walking-skeleton order plane, the telemetry plane, all four frontends, the
+This document describes the system **as currently implemented** — **all roadmap phases (0–4) are
+complete**: the walking-skeleton order plane, the telemetry plane, all four frontends, the
 verified-JWT identity + Postgres-RLS isolation layer, the event-sourced Order aggregate with
 optimistic concurrency, Confluent-Avro on the Kafka event bus with an enforced Schema Registry,
-a self-built `payments` service with authorize/capture/void and deterministic decline, and
-event-sourced driver dispatch with a driver job UI — online presence + live offers over SSE).
+a self-built `payments` service with authorize/capture/void and deterministic decline,
+event-sourced driver dispatch with a driver job UI (online presence + live offers over SSE),
+end-to-end `correlationId` observability, and the frontend polish/resilience layer (design tokens +
+per-tenant branding, error/not-found boundaries, loading skeletons + empty states, action toasts).
 It is deliberately scoped to working code — a "Not yet built" section at the end lists what the
-master spec still defers to later phases.
+master spec still defers to backlog.
 
 > Companion to the vision spec in
 > [`docs/superpowers/specs/2026-06-13-flashbite-showcase-design.md`](superpowers/specs/2026-06-13-flashbite-showcase-design.md).
@@ -509,18 +511,23 @@ flowchart TB
 
 ## 7. Frontends
 
-All four Next.js apps reuse `@flashbite/web-shared` (shadcn/ui design system on Tailwind v4,
-Manrope, the API client, the **auth store** + `AuthGate`/`LoginForm`, `useOrderStream` SSE hook,
-`DataTable`, geo + analytics helpers). Each app proxies `/api/read/*` -> :3002, `/api/write/*` ->
-:3001, and `/api/identity/*` -> :3003 via Next rewrites (so the browser stays same-origin — login is
-CORS-free and the proxy forwards `Authorization` automatically).
+All four Next.js apps reuse `@flashbite/web-shared` (a layered design-token system on Tailwind v4 —
+primitives → semantic → `@theme` — with shadcn/ui components and Manrope; the API client, the
+**auth store** + `AuthGate`/`LoginForm`, `useOrderStream`/dispatch SSE hooks, `DataTable`,
+`ErrorState`/`EmptyState`, the `sonner` `Toaster`, `<TenantBranding/>`, geo + analytics helpers).
+Each app proxies `/api/read/*` -> :3002, `/api/write/*` -> :3001, and `/api/identity/*` -> :3003 via
+Next rewrites (so the browser stays same-origin — login is CORS-free and the proxy forwards
+`Authorization` automatically).
 
 Every app is wrapped in an `AuthGate` (role-gated): no token shows a minimal `LoginForm` (email +
 password, with a one-click **demo-user quick-pick**); the access token is held **in memory** (never
 localStorage) and `AuthGate` bootstraps it from the httpOnly refresh cookie on load, and the API
-client + SSE hook send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
-switcher anymore; "switch tenant" = log in as that tenant's user). A `401` triggers one silent
-refresh + retry (see "Access + refresh tokens" above); only a failed refresh bounces to login.
+client + SSE hooks send `Authorization: Bearer` (the JWT carries the tenant — there is no tenant
+switcher anymore; "switch tenant" = log in as that tenant's user). A `401` triggers a **single-flight**
+refresh + retry shared by `bootstrap`, `authedFetch`, and the SSE hooks (so a reload mid-refresh can't
+double-spend the one-time-use cookie and revoke the session); an SSE 401 refreshes transparently
+rather than logging out, and only a failed refresh bounces to login (backed by an identity
+reuse-grace window — see "Access + refresh tokens" above).
 
 - **web-customer** (`customer@<tenant>.test`) — menu/cart/checkout, then a tracking page that polls
   until terminal status.
@@ -535,6 +542,15 @@ refresh + retry (see "Access + refresh tokens" above); only a failed refresh bou
   per-tenant Mapbox maps, and a combined orders table with cancellation reasons. Live via one merged
   operator SSE stream; data from the cross-tenant `/admin/orders` + `/admin/drivers` endpoints;
   analytics computed in the browser from the combined result.
+
+**Resilience & polish (Phase 4b).** Every app's root layout mounts `<TenantBranding/>` (a runtime
+`--primary`/`--ring` override from the logged-in tenant's `brand_color`, so Berlin renders green and
+Tokyo violet off one shared token set) and a `<Toaster/>`. Per-app `error.tsx` / `not-found.tsx`
+boundaries render the shared `ErrorState` (with a **Sign out** escape so an auth-driven render error
+isn't a trap); list loads show skeleton rows then a shared `EmptyState`, both unified inside
+`DataTable` (`loading` → skeletons → empty → rows); and every mutation — place/confirm order,
+merchant accept/decline, dispatch accept/reject/pickup/deliver, go online/offline — fires a
+success/failure `sonner` toast (the single feedback channel; inline error text was removed).
 
 ---
 
@@ -623,9 +639,10 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
   load; snapshotting and a reusable command-dispatch abstraction are backlogged (see
   `docs/superpowers/backlog.md`).
 - **Real Stripe integration** — the `payments` service implements authorize/capture/void against its own DB; refund, webhook settlement, payment read model, and real Stripe/payment-provider wiring remain backlog.
-- **Identity hardening** — refresh tokens, key persistence/rotation across restarts, user
-  management/signup, revocation. Phase 2 ships the core (RS256 login + JWKS + seeded users,
-  access-token-only, startup-generated keys).
+- **Identity — user management** — self-signup, password reset, and admin-side user/session
+  management (revocation beyond logout) remain backlog. The token machinery is **done**: rotating
+  one-time-use refresh cookies, key persistence + rotation across restarts, envelope-encrypted keys
+  at rest, and a reuse-grace window.
 - **Telemetry-archiver + history store** — durable ping history for analytics / driver safety score.
 - **Microfrontend shell** — composing the four apps into one product shell.
 - **Push-based customer tracking** — replace the customer poll with SSE.
@@ -663,3 +680,13 @@ These appear in the vision spec or `docs/superpowers/backlog.md` but are **not i
 > `GET /driver/dispatch/stream` SSE feeding an offer card (countdown) + active-job card. Backlog:
 > client-supplied `driverId` should be server-derived from `sub`; order aggregate left `ACCEPTED` on
 > dispatch failure (requeue/refund); customer live driver-location tracking (**3d-iii**).
+>
+> **Completed in Phase 4:** **4a** observability — structured pino logging with an end-to-end
+> `correlationId` threaded HTTP edge → `EventEnvelope` → Kafka headers → consumers → the Temporal saga,
+> so one id greps an order's whole lifecycle across every service and worker (see §9). **4b** frontend
+> polish/resilience — **4b-i** layered design tokens (primitives → semantic → `@theme`, one shared
+> `global.css`) + catalog-driven per-tenant branding; **4b-ii** `error.tsx`/`not-found.tsx` boundaries
+> + shared `ErrorState`, plus auth-resilience hardening (single-flight refresh shared across
+> bootstrap/`authedFetch`/SSE, transparent SSE-401 refresh, and an identity refresh-token reuse-grace
+> window); **4b-iii** loading skeletons + `EmptyState` unified through `DataTable`; **4b-iv** `sonner`
+> action-feedback toasts on every mutation.
