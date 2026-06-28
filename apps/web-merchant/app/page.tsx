@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listOrders, getOrder, useOrderStream, applyOrderEvent, upsertOrder,
-  statusFromEventType, useAuthStore, Input, ORDER_STATUS, AuthGate,
+  statusFromEventType, useAuthStore, Input, ORDER_STATUS, AuthGate, ErrorState,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   useTenantDispatchStream,
   type OrderView, type OrderStreamEvent,
@@ -23,9 +23,12 @@ function MerchantDashboard() {
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState<string>("ALL");
   const [selected, setSelected] = useState<OrderView | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const resync = useCallback(() => {
-    listOrders().then(setOrders).catch(() => setOrders([]));
+    listOrders()
+      .then((o) => { setOrders(o); setLoadError(false); })
+      .catch(() => setLoadError(true));
   }, []);
 
   useEffect(() => { resync(); }, [resync]);
@@ -77,7 +80,16 @@ function MerchantDashboard() {
             </SelectContent>
           </Select>
         </div>
-        <OrdersTable data={visible} globalFilter={filter} dispatches={dispatches} onRowClick={setSelected} />
+        {loadError ? (
+          <ErrorState
+            title="Couldn't load orders"
+            description="We couldn't reach the order service."
+            action={{ label: "Retry", onClick: resync }}
+            className="mx-auto mt-10 max-w-sm"
+          />
+        ) : (
+          <OrdersTable data={visible} globalFilter={filter} dispatches={dispatches} onRowClick={setSelected} />
+        )}
       </main>
       <OrderDetailSheet order={current} dispatch={current ? dispatches[current.orderId] ?? null : null} onClose={() => setSelected(null)} />
     </div>
