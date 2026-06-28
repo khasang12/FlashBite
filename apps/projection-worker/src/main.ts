@@ -30,7 +30,7 @@ export async function runConsumer(consumer: Consumer, db: Db, registry: SchemaRe
 }
 
 /** Wires a kafkajs consumer to applyDispatchEvent for the dispatch-events topic. */
-export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: SchemaRegistry): Promise<ConsumerHandle> {
+export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: SchemaRegistry, offerTimeoutSeconds = 30): Promise<ConsumerHandle> {
   await consumer.connect();
   await consumer.subscribe({ topic: TOPICS.DISPATCH_EVENTS, fromBeginning: false });
   await consumer.run({
@@ -39,7 +39,7 @@ export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: 
       if (!envelope) return;
       await runWithObsContext(
         { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
-        async () => { await applyDispatchEvent(db, envelope); log.info({ eventType: envelope.eventType }, "projected"); },
+        async () => { await applyDispatchEvent(db, envelope, offerTimeoutSeconds); log.info({ eventType: envelope.eventType }, "projected"); },
       );
     },
   });
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
   const handle = await runConsumer(consumer, db, registry);
 
   const dispatchConsumer = kafka.consumer({ groupId: CONSUMER_GROUPS.DISPATCH_PROJECTION });
-  const dispatchHandle = await runDispatchConsumer(dispatchConsumer, db, registry);
+  const dispatchHandle = await runDispatchConsumer(dispatchConsumer, db, registry, config.dispatchOfferTimeoutSeconds);
 
   log.info("projection-worker running");
   const shutdown = async (): Promise<void> => {

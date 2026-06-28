@@ -12,7 +12,7 @@ import {
 
 const CONSUMER_NAME = CONSUMER_GROUPS.DISPATCH_PROJECTION;
 
-export async function applyDispatchEvent(db: Db, envelope: EventEnvelope): Promise<"applied" | "skipped"> {
+export async function applyDispatchEvent(db: Db, envelope: EventEnvelope, offerTimeoutSeconds = 30): Promise<"applied" | "skipped"> {
   const inbox = db.collection(READ_COLLECTIONS.PROCESSED);
   const inboxId = `${envelope.tenantId}:${CONSUMER_NAME}:${envelope.eventId}`;
 
@@ -35,6 +35,7 @@ export async function applyDispatchEvent(db: Db, envelope: EventEnvelope): Promi
         ...base,
         status: DISPATCH_STATUS.OFFERED,
         offeredDriverId: (envelope.payload as DriverOfferedPayload).driverId,
+        offerExpiresAt: new Date(Date.parse(envelope.occurredAt) + offerTimeoutSeconds * 1000).toISOString(),
       };
       break;
     case EVENT_TYPES.DISPATCH_ACCEPTED:
