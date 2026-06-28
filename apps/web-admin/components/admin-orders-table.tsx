@@ -24,13 +24,14 @@ const columns: ColumnDef<OrderView>[] = [
   },
 ];
 
-export function AdminOrdersTable({ data, globalFilter }: { data: OrderView[]; globalFilter: string }) {
+export function AdminOrdersTable({ data, globalFilter, loading }: { data: OrderView[]; globalFilter: string; loading: boolean }) {
   return (
     <DataTable
       columns={columns}
       data={data}
       initialSorting={[{ id: "time", desc: true }]}
       globalFilter={globalFilter}
+      loading={loading}
       emptyMessage="No orders yet."
     />
   );

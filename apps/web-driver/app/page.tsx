@@ -61,7 +61,7 @@ function DriverDashboard() {
   const me = tenants.find((t) => t.slug === tenantId);
   const center = me ? { lng: me.lng, lat: me.lat } : null;
   // Don't poll until the city center is known; pass a placeholder coord while watching is false.
-  const { nearby } = useNearbyWatch(center ?? { lng: 0, lat: 0 }, online && center !== null);
+  const { nearby, loading } = useNearbyWatch(center ?? { lng: 0, lat: 0 }, online && center !== null);
   const self = nearby.find((d) => d.driverId === driverId) ?? null;
   const others = toNearbyRows(nearby, driverId);
 
@@ -118,7 +118,7 @@ function DriverDashboard() {
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Nearby drivers ({others.length})
               </div>
-              <NearbyTable data={others} />
+              <NearbyTable data={others} loading={loading} />
             </section>
           </div>
         )}

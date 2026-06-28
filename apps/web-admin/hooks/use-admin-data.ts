@@ -19,12 +19,14 @@ export interface AdminData {
   errors: string[];
   handleEvent: (e: AdminOrderStreamEvent) => void;
   resync: () => void;
+  loading: boolean;
 }
 
 export function useAdminData(): AdminData {
   const [orders, setOrders] = useState<OrderView[]>([]);
   const [driversByTenant, setDriversByTenant] = useState<Record<string, NearbyDriver[]>>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const ordersRef = useRef(orders);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
 
@@ -42,7 +44,8 @@ export function useAdminData(): AdminData {
   const resync = useCallback(() => {
     getAdminOrders()
       .then((rows) => { if (mountedRef.current) setOrders(rows); })
-      .catch(() => noteError("orders: admin"));
+      .catch(() => noteError("orders: admin"))
+      .finally(() => { if (mountedRef.current) setLoading(false); });
   }, [noteError]);
 
   // initial snapshot — single cross-tenant fetch
@@ -89,5 +92,5 @@ export function useAdminData(): AdminData {
     }
   }, []);
 
-  return { orders, driversByTenant, errors, handleEvent, resync };
+  return { orders, driversByTenant, errors, handleEvent, resync, loading };
 }

@@ -8,6 +8,7 @@ import {
   Input,
   Card,
   CardContent,
+  EmptyState,
 } from "@flashbite/web-shared";
 import { Header } from "@/components/header";
 
@@ -53,7 +54,11 @@ export default function Checkout() {
         <Card>
           <CardContent className="p-4">
             {items.length === 0 ? (
-              <p className="text-muted-foreground">Your cart is empty.</p>
+              <EmptyState
+                title="Your cart is empty"
+                description="Add something from the menu to get started."
+                action={{ label: "Browse menu", href: "/" }}
+              />
             ) : (
               <>
                 {items.map((l) => (
