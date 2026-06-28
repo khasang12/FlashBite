@@ -22,7 +22,7 @@ export class TenantCatalogService {
     if (this.cache !== null && Date.now() - this.loadedAt < this.ttlMs) return this.cache;
     try {
       const rows = await this.prisma.tenant.findMany();
-      this.cache = rows.map((r) => ({ slug: r.slug, displayName: r.displayName, lng: r.lng, lat: r.lat, status: r.status }));
+      this.cache = rows.map((r) => ({ slug: r.slug, displayName: r.displayName, lng: r.lng, lat: r.lat, status: r.status, brandColor: r.brandColor ?? undefined }));
       this.loadedAt = Date.now();
       return this.cache;
     } catch (err) {

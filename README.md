@@ -77,9 +77,9 @@ flowchart LR
 - **Role-based access + operator console** — `@Roles` guard on the JWT `role`; an authenticated cross-tenant `/admin/*` API powers the admin dashboard.
 - **Polyglot persistence + real-time telemetry** — Postgres (event store), Mongo (read models + inbox), Redis Cluster (cache + geo, `tenant:{id}` hash tags); ephemeral driver GPS into per-tenant Redis geo, served via `GEOSEARCH`.
 - **Idempotency everywhere** — stable `eventId`, Mongo inbox dedup, Temporal `WorkflowId = tenantId:orderId`.
-- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin, on a shared design system, Bearer auth.
+- **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin, on a shared layered design-token system (primitives → semantic → Tailwind v4 `@theme`) with a catalog-driven per-tenant brand accent (`<TenantBranding/>` overrides `--primary`/`--ring` at runtime from `tenants.brand_color`), Bearer auth.
 
-**Planned:** frontend polish + observability (Phase 4); real Stripe (refund / webhook / read-model) is backlogged. See `docs/superpowers/backlog.md`.
+**In progress (Phase 4):** observability (4a, done — see [Observability](#observability-phase-4a)) + frontend polish (4b — design tokens & per-tenant branding done). **Backlogged:** real Stripe (refund / webhook / read-model). See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -102,8 +102,8 @@ apps/        identity (JWT/JWKS), write-api, read-api, outbox-poller, projection
 packages/    contracts (event types + envelope/key helpers + ROLES/TENANTS + .avsc schemas),
              messaging (Avro serde + Schema Registry client + header/publish/consume helpers
              + register script), shared (Prisma, Mongo, Redis, event-store, tenant-scoped tx),
-             tenant-context (verify-JWT auth context + @Roles guard), web-shared (design system
-             + client + auth store)
+             tenant-context (verify-JWT auth context + @Roles guard), web-shared (layered
+             design tokens + components + client + auth/tenant-branding stores)
 infra/       docker-compose.yml + runbook
 spikes/      Phase 0 de-risking scripts (throwaway)
 docs/        ARCHITECTURE.md, specs, per-phase plans, backlog
@@ -124,7 +124,7 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
 | **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
 | **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) + customer live driver-location map (3d-iii) + delivery tracking on customer/merchant | ✅ complete |
-| **4** | Frontend polish + observability story | ⬜ next (only phase left) |
+| **4** | Frontend polish + observability story | 🚧 in progress |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
 (projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga, **1c-ii** driver
@@ -135,6 +135,11 @@ Phase 2 was built in slices: **2a** identity service (RS256 JWT + JWKS, seeded u
 verified-JWT tenant/role context replacing `X-Tenant-ID` on write-api + read-api (Bearer-required
 hard cut), **S2** Postgres RLS on the write plane, **S3** the cross-tenant operator console API, and
 **S4** frontend login (Bearer everywhere, admin via the operator endpoints).
+
+Phase 4 is being built in slices: **4a** observability (end-to-end `correlationId` tracing across
+services, workers, and the Temporal saga — see [Observability](#observability-phase-4a)), and **4b**
+frontend polish — **4b-i** layered design tokens (primitives → semantic → Tailwind `@theme`, one
+shared `global.css`) + a catalog-driven per-tenant brand accent applied at runtime.
 
 ---
 

@@ -1,0 +1,9 @@
+@import "./tokens.css";
+@import "./theme.css";
+
+/* Shared base layer (previously duplicated in each app's globals.css). */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}

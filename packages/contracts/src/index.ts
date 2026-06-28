@@ -237,6 +237,8 @@ export interface TenantView {
   lng: number;
   lat: number;
   status: string;
+  /** Per-tenant brand accent (hex). Optional — absent/null tenants use the default brand. */
+  brandColor?: string;
 }
 
 export interface NearbyDriver {
