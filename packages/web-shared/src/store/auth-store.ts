@@ -70,7 +70,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (bootstrapped) return;
     bootstrapped = true;
     try {
-      const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader() });
+      // Cap the bootstrap refresh so an unreachable/hung identity can't pin the app on the "Loading…"
+      // gate forever — a timeout falls through to the login screen (booting is cleared in `finally`).
+      const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader(), signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const { accessToken } = (await res.json()) as { accessToken: string };
         set({ token: accessToken, claims: decodeClaims(accessToken) });
