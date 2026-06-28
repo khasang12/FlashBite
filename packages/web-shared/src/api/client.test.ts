@@ -388,4 +388,19 @@ describe("api client", () => {
     fetchMock.mockRejectedValue(new Error("timeout"));
     expect(await refreshAuthSession()).toBe(false);
   });
+
+  it("refreshAuthSession single-flights concurrent callers into ONE /auth/refresh (bootstrap + authedFetch can't double-spend the one-time-use cookie)", async () => {
+    let refreshCalls = 0;
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/identity/auth/refresh") {
+        refreshCalls += 1;
+        return Promise.resolve(new Response(JSON.stringify({ accessToken: "shared-token" }), { status: 200 }));
+      }
+      return Promise.resolve(new Response("", { status: 200 }));
+    });
+    const [a, b] = await Promise.all([refreshAuthSession(), refreshAuthSession()]);
+    expect(a).toBe(true);
+    expect(b).toBe(true);
+    expect(refreshCalls).toBe(1);
+  });
 });

@@ -1,5 +1,9 @@
 import type { OrderItem, OrderView, OrderPaymentView, DispatchView, TenantView } from "@flashbite/contracts";
-import { useAuthStore } from "../store/auth-store";
+import { useAuthStore, refreshAuthSession } from "../store/auth-store";
+
+// The single-flight refresh lives in auth-store so bootstrap, authedFetch, and the SSE hooks all
+// share ONE /auth/refresh against the one-time-use cookie. Re-exported here for the SSE hooks.
+export { refreshAuthSession };
 
 export interface PlaceOrderRequest {
   orderId: string;
@@ -38,51 +42,11 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Per-app refresh-cookie scoping: identity reads X-FB-App to pick this app's cookie name
-// (cookies ignore port, so localhost apps would otherwise share one fb_rt). See auth-store.
-const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
-const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
-
-/** Cap the refresh round-trip so a hung identity can't wedge callers (authedFetch / SSE / bootstrap)
- *  in a permanent pending state. A timeout is treated as a failed refresh. */
-const REFRESH_TIMEOUT_MS = 8000;
-
-/** Single-flight refresh: concurrent 401s share one /auth/refresh call. */
-let refreshing: Promise<boolean> | null = null;
-
-async function refreshSession(): Promise<boolean> {
-  try {
-    const res = await fetch("/api/identity/auth/refresh", {
-      method: "POST",
-      credentials: "include",
-      headers: fbAppHeader(),
-      signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
-    });
-    if (!res.ok) return false;
-    const { accessToken } = (await res.json()) as { accessToken: string };
-    useAuthStore.getState().setToken(accessToken);
-    return true;
-  } catch {
-    return false; // network error or timeout — treat as a failed refresh
-  }
-}
-
-function ensureRefreshed(): Promise<boolean> {
-  if (!refreshing) refreshing = refreshSession().finally(() => { refreshing = null; });
-  return refreshing;
-}
-
-/** Single-flight session refresh shared by authedFetch and the SSE hooks. Resolves true when a fresh
- *  access token was stored, false otherwise (the caller should then log out). Never rejects. */
-export function refreshAuthSession(): Promise<boolean> {
-  return ensureRefreshed();
-}
-
 /** fetch + Bearer header; on 401 try ONE silent refresh + retry, else clear the session and throw. */
 async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
   let res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
   if (res.status !== 401) return res;
-  const ok = await ensureRefreshed();
+  const ok = await refreshAuthSession();
   if (ok) {
     res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
     if (res.status !== 401) return res;
