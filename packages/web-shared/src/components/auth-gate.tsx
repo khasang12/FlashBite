@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { useAuthStore } from "../store/auth-store";
 import { LoginForm, type DemoUser } from "./login-form";
 import { Button } from "./ui/button";
-import { TenantBranding } from "./tenant-branding";
 
 export function AuthGate({
   children,
@@ -45,7 +44,6 @@ export function AuthGate({
   }
   return (
     <>
-      <TenantBranding />
       <div className="flex items-center justify-end gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
         <span>
           {claims?.role}@{claims?.tenantId}
