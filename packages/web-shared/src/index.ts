@@ -111,4 +111,6 @@ export { AuthGate } from "./components/auth-gate";
 export { TenantBranding } from "./components/tenant-branding";
 export { ErrorState, type ErrorStateAction } from "./components/error-state";
 export { EmptyState } from "./components/empty-state";
+export { Toaster } from "./components/toaster";
+export { toast } from "sonner";
 export { useTenants } from "./tenants/use-tenants";

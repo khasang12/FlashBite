@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
-import { TenantBranding } from "@flashbite/web-shared";
+import { TenantBranding, Toaster } from "@flashbite/web-shared";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -25,6 +25,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <TenantBranding />
+        <Toaster />
         {children}
       </body>
     </html>

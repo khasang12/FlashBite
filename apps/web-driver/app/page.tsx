@@ -6,7 +6,7 @@ import {
   toNearbyRows,
   DISPATCH_STATUS,
   useDispatchStream,
-  acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDriverOnline,
+  acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDriverOnline, toast,
 } from "@flashbite/web-shared";
 import { useNearbyWatch } from "@/hooks/use-nearby-watch";
 import { NearbyMap } from "@/components/nearby-map";
@@ -83,16 +83,16 @@ function DriverDashboard() {
         {offer && (
           <OfferCard
             offer={offer}
-            onAccept={() => { void acceptDispatch(offer.orderId, driverId); }}
-            onReject={() => { setDismissed(offer.orderId); void rejectDispatch(offer.orderId, driverId); }}
+            onAccept={() => { acceptDispatch(offer.orderId, driverId).then(() => toast.success("Offer accepted")).catch(() => toast.error("Couldn't update the offer.")); }}
+            onReject={() => { setDismissed(offer.orderId); rejectDispatch(offer.orderId, driverId).then(() => toast.success("Offer declined")).catch(() => toast.error("Couldn't update the offer.")); }}
             onExpire={onExpire}
           />
         )}
         {job && (
           <ActiveJobCard
             job={job}
-            onPickup={() => { void pickupOrder(job.orderId, driverId); }}
-            onDeliver={() => { void deliverOrder(job.orderId, driverId); }}
+            onPickup={() => { pickupOrder(job.orderId, driverId).then(() => toast.success("Marked picked up")).catch(() => toast.error("Couldn't update the job.")); }}
+            onDeliver={() => { deliverOrder(job.orderId, driverId).then(() => toast.success("Marked delivered")).catch(() => toast.error("Couldn't update the job.")); }}
           />
         )}
         {!offer && !job && (

@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   EmptyState,
+  toast,
 } from "@flashbite/web-shared";
 import { Header } from "@/components/header";
 
@@ -20,7 +21,6 @@ export default function Checkout() {
   const total = useCartStore((s) => s.totalCents());
   const clear = useCartStore((s) => s.clear);
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
 
@@ -28,7 +28,6 @@ export default function Checkout() {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError(null);
     try {
       const orderId = crypto.randomUUID();
       await placeOrder({
@@ -38,9 +37,10 @@ export default function Checkout() {
         totalAmount: total,
       });
       clear();
+      toast.success("Order placed");
       router.push(`/orders/${orderId}`);
     } catch {
-      setError("Could not place your order. Please try again.");
+      toast.error("Couldn't place your order. Please try again.");
       inFlight.current = false;
       setBusy(false);
     }
@@ -80,9 +80,6 @@ export default function Checkout() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
-                {error && (
-                  <p className="mt-2 text-sm text-destructive">{error}</p>
-                )}
                 <Button
                   className="mt-4 w-full"
                   disabled={busy}

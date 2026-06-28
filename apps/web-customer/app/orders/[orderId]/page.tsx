@@ -4,6 +4,7 @@ import {
   getOrder,
   fetchOrderPayment,
   confirmPayment,
+  toast,
   paymentStatusLabel,
   cancelReasonLabel,
   getOrderDispatch,
@@ -61,7 +62,6 @@ function OrderTrackingContent({
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [dispatch, setDispatch] = useState<DispatchView | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
   const tenantId = (useAuthStore((s) => s.claims?.tenantId) ?? "berlin") as Tenant;
   const { tenants } = useTenants();
   const me = tenants.find((t) => t.slug === tenantId);
@@ -137,12 +137,12 @@ function OrderTrackingContent({
   const onConfirm = async () => {
     if (!order) return;
     setConfirming(true);
-    setConfirmError(null);
     try {
       await confirmPayment(order.orderId);
+      toast.success("Payment confirmed");
       // saga authorizes shortly; the existing poll surfaces Payment: Authorized
     } catch {
-      setConfirmError("Couldn't confirm payment. Please try again.");
+      toast.error("Couldn't confirm payment. Please try again.");
       setConfirming(false);
     }
   };
@@ -174,7 +174,6 @@ function OrderTrackingContent({
                     <Button className="w-full" disabled={confirming} onClick={onConfirm}>
                       {confirming ? "Confirming…" : `Confirm payment ${euro(order.totalAmount)}`}
                     </Button>
-                    {confirmError && <p className="text-sm text-destructive">{confirmError}</p>}
                   </div>
                 )}
                 {paymentStatusLabel(paymentStatus) && (

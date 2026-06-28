@@ -1,20 +1,19 @@
 "use client";
 import { useState } from "react";
-import { Button, goOnline, goOffline } from "@flashbite/web-shared";
+import { Button, goOnline, goOffline, toast } from "@flashbite/web-shared";
 
 export function OnlineToggle({ driverId, online, onChange }: { driverId: string; online: boolean; onChange: (online: boolean) => void }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
     setBusy(true);
-    setError(null);
     const next = !online;
     try {
       if (next) await goOnline(driverId); else await goOffline(driverId);
       onChange(next);
+      toast.success(next ? "You're online" : "You're offline");
     } catch {
-      setError("Could not update status");
+      toast.error("Couldn't update your status.");
     } finally {
       setBusy(false);
     }
@@ -28,7 +27,6 @@ export function OnlineToggle({ driverId, online, onChange }: { driverId: string;
       <Button variant={online ? "secondary" : "default"} onClick={toggle} disabled={busy} aria-pressed={online}>
         {online ? "Go offline" : "Go online"}
       </Button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
 }
