@@ -22,6 +22,8 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
+import { EmptyState } from "./empty-state";
 
 export interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -31,6 +33,7 @@ export interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData) => void;
   pageSize?: number;
   emptyMessage?: string;
+  loading?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -41,6 +44,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   pageSize = 10,
   emptyMessage = "No orders yet.",
+  loading = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -86,13 +90,20 @@ export function DataTable<TData, TValue>({
         ))}
       </TableHeader>
       <TableBody>
-        {table.getRowModel().rows.length === 0 ? (
+        {loading ? (
+          Array.from({ length: 5 }).map((_, r) => (
+            <TableRow key={`sk-${r}`}>
+              {columns.map((_c, c) => (
+                <TableCell key={`sk-${r}-${c}`}>
+                  <Skeleton className="h-4 w-2/3" />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))
+        ) : table.getRowModel().rows.length === 0 ? (
           <TableRow>
-            <TableCell
-              colSpan={columns.length}
-              className="h-24 text-center text-muted-foreground"
-            >
-              {emptyMessage}
+            <TableCell colSpan={columns.length} className="p-0">
+              <EmptyState title={emptyMessage} />
             </TableCell>
           </TableRow>
         ) : (
