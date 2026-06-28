@@ -25,6 +25,7 @@ export interface OrderLifecycleArgs {
   offerTimeoutSeconds: number;
   maxOffers: number;
   deliverySeconds: number;
+  correlationId: string;
 }
 
 /** Map a driverDispatchWorkflow outcome to the order saga's terminal result. Delivered fulfils the
@@ -49,7 +50,7 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
 
   const confirmedInTime = await condition(() => confirmed, `${args.confirmSeconds}s`);
   if (!confirmedInTime) {
-    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_TIMEOUT);
+    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_TIMEOUT, args.correlationId);
     return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_TIMEOUT;
   }
 
@@ -59,11 +60,11 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
   try {
     ({ authorized } = await authorizePaymentActivity(args.tenantId, args.orderId, args.totalAmount));
   } catch {
-    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
+    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED, args.correlationId);
     return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
   }
   if (!authorized) {
-    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
+    await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED, args.correlationId);
     return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
   }
 
@@ -76,10 +77,10 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
       await capturePaymentActivity(args.tenantId, args.orderId);
     } catch {
       await voidPaymentActivity(args.tenantId, args.orderId).catch(() => undefined);
-      await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED);
+      await recordOrderCancelledActivity(args.tenantId, args.orderId, ORDER_CANCEL_REASONS.PAYMENT_FAILED, args.correlationId);
       return ORDER_SAGA_RESULTS.CANCELLED_PAYMENT_FAILED;
     }
-    await recordOrderAcceptedActivity(args.tenantId, args.orderId);
+    await recordOrderAcceptedActivity(args.tenantId, args.orderId, args.correlationId);
     // Orchestrate the fulfillment leg as a child workflow — one workflow tree per order. A child
     // that *returns* FAILED and one that *throws* (e.g. an activity exhausts its retries) both mean
     // the same thing to the order: dispatch did not deliver. The order stays ACCEPTED either way
@@ -94,6 +95,7 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
           offerTimeoutSeconds: args.offerTimeoutSeconds,
           maxOffers: args.maxOffers,
           deliverySeconds: args.deliverySeconds,
+          correlationId: args.correlationId,
         }],
       });
     } catch {
@@ -104,7 +106,7 @@ export async function orderLifecycleWorkflow(args: OrderLifecycleArgs): Promise<
 
   await voidPaymentActivity(args.tenantId, args.orderId);
   const reason = signalledInTime ? ORDER_CANCEL_REASONS.DECLINED : ORDER_CANCEL_REASONS.SLA_BREACH;
-  await recordOrderCancelledActivity(args.tenantId, args.orderId, reason);
+  await recordOrderCancelledActivity(args.tenantId, args.orderId, reason, args.correlationId);
   return reason === ORDER_CANCEL_REASONS.SLA_BREACH ? ORDER_SAGA_RESULTS.CANCELLED_SLA : ORDER_SAGA_RESULTS.CANCELLED_DECLINED;
 }
 

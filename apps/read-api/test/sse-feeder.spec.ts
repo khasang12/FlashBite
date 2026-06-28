@@ -32,6 +32,10 @@ describe("toDispatchView", () => {
     const v = toDispatchView({ ...base, eventType: EVENT_TYPES.DRIVER_OFFERED, payload: { orderId: "o-1", driverId: "drv-1" } } as never);
     expect(v).toMatchObject({ orderId: "o-1", status: "OFFERED", offeredDriverId: "drv-1", version: 3 });
   });
+  it("stamps offerExpiresAt = occurredAt + offerTimeoutSeconds on an OFFERED view", () => {
+    const v = toDispatchView({ ...base, eventType: EVENT_TYPES.DRIVER_OFFERED, payload: { orderId: "o-1", driverId: "drv-1" } } as never, 60);
+    expect(v?.offerExpiresAt).toBe("2026-06-21T00:01:00.000Z");
+  });
   it("maps DispatchAccepted -> DISPATCHED with driverId", () => {
     const v = toDispatchView({ ...base, eventType: EVENT_TYPES.DISPATCH_ACCEPTED, payload: { orderId: "o-1", driverId: "drv-1" } } as never);
     expect(v).toMatchObject({ status: "DISPATCHED", driverId: "drv-1" });

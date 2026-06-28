@@ -555,7 +555,67 @@ refresh + retry (see "Access + refresh tokens" above); only a failed refresh bou
 
 ---
 
-## 9. Not yet built (planned / backlog)
+## 9. Observability (Phase 4a)
+
+### Structured logging
+
+All NestJS apps and worker processes use a single `createLogger(service)` factory
+(`@flashbite/shared`) backed by [pino](https://github.com/pinojs/pino). Logs are emitted as
+newline-delimited JSON to stdout.
+
+Every log line includes at minimum:
+
+| Field | Source |
+|---|---|
+| `service` | the `service` label passed to `createLogger` |
+| `correlationId` | propagated from the ALS `obsContext` |
+| `tenantId` | bound by `AuthMiddleware` after JWT verification |
+| `eventId` | added by event-processing handlers where applicable |
+
+`LOG_LEVEL` (default `info`) controls verbosity for all services; set it in `.env`.
+
+### correlationId propagation chain
+
+```
+HTTP request (x-correlation-id header, or minted fresh)
+  └─ CorrelationMiddleware → runWithObsContext({ correlationId })
+       └─ write-api handler → appendWithExpectedVersion
+            └─ buildEnvelope stamps correlationId from obsContext onto the EventEnvelope
+                 └─ outbox row payload (JSON) carries the envelope
+                      └─ outbox-poller publishes to Kafka with correlationId in headers
+                           └─ consumers (projection-worker, saga-worker, telemetry-worker)
+                                read the header, bind obsContext → every log line in that
+                                consumer call carries the same correlationId
+```
+
+The outbox envelope is the durable checkpoint: querying `outbox.payload->>'correlationId'`
+for any order proves the id was propagated from the inbound HTTP request all the way to the
+Kafka message, without needing a running Kafka consumer in tests.
+
+### Grepping one correlationId end-to-end
+
+```bash
+# capture the id echoed on the response header
+CORR=$(curl -si -XPOST http://localhost:3001/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"...","customerId":"c-1","items":[{"sku":"pizza","qty":1,"price":1200}],"totalAmount":1200}' \
+  | grep -i x-correlation-id | awk '{print $2}' | tr -d '\r')
+
+# all log lines from every service bearing that id (pipe dev services through tee to files first)
+grep "$CORR" /tmp/flashbite-*.log
+```
+
+### Live observability UIs
+
+| UI | URL | What it shows |
+|---|---|---|
+| Temporal | http://localhost:8080 | Saga workflow timelines, activity histories, signals, failures |
+| Redpanda Console | http://localhost:8085 | Kafka topic messages, consumer group offsets and lag |
+
+---
+
+## 10. Not yet built (planned / backlog)
 
 These appear in the vision spec or `docs/superpowers/backlog.md` but are **not implemented**:
 

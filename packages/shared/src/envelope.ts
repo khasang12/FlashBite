@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { EventEnvelope } from "@flashbite/contracts";
+import { getObsContext } from "./obs-context";
 
 /**
  * Builds an event envelope. Lives in @flashbite/shared (not contracts) because it
@@ -12,6 +13,7 @@ export function buildEnvelope<T>(args: {
   payload: T;
   eventId?: string;
   occurredAt?: string;
+  correlationId?: string;
 }): EventEnvelope<T> {
   return {
     tenantId: args.tenantId,
@@ -19,6 +21,7 @@ export function buildEnvelope<T>(args: {
     eventType: args.eventType,
     version: args.version,
     occurredAt: args.occurredAt ?? new Date().toISOString(),
+    correlationId: args.correlationId ?? getObsContext()?.correlationId ?? randomUUID(),
     payload: args.payload,
   };
 }

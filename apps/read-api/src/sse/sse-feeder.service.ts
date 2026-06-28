@@ -1,6 +1,7 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from "@nestjs/common";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
-import { loadConfig } from "@flashbite/shared";
+import { loadConfig, runWithObsContext } from "@flashbite/shared";
+import { APP_LOGGER, type Logger } from "@flashbite/tenant-context";
 import {
   CONSUMER_GROUPS,
   DISPATCH_STATUS,
@@ -27,12 +28,17 @@ export function toStreamEvent(envelope: EventEnvelope) {
 
 /** Maps a dispatch-events envelope to a DispatchView; null for unrelated events.
  *  Mirrors applyDispatchEvent in the projection worker. */
-export function toDispatchView(envelope: EventEnvelope): DispatchView | null {
+export function toDispatchView(envelope: EventEnvelope, offerTimeoutSeconds = 30): DispatchView | null {
   const orderId = (envelope.payload as { orderId: string }).orderId;
   const base = { tenantId: envelope.tenantId, orderId, version: envelope.version, updatedAt: envelope.occurredAt };
   switch (envelope.eventType) {
     case EVENT_TYPES.DRIVER_OFFERED:
-      return { ...base, status: DISPATCH_STATUS.OFFERED, offeredDriverId: (envelope.payload as DriverOfferedPayload).driverId };
+      return {
+        ...base,
+        status: DISPATCH_STATUS.OFFERED,
+        offeredDriverId: (envelope.payload as DriverOfferedPayload).driverId,
+        offerExpiresAt: new Date(Date.parse(envelope.occurredAt) + offerTimeoutSeconds * 1000).toISOString(),
+      };
     case EVENT_TYPES.DISPATCH_ACCEPTED:
       return { ...base, status: DISPATCH_STATUS.DISPATCHED, driverId: (envelope.payload as DispatchAcceptedPayload).driverId };
     case EVENT_TYPES.ORDER_PICKED_UP:
@@ -52,10 +58,12 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly stream: OrderStreamService,
     private readonly dispatchStream: DispatchStreamService,
+    @Inject(APP_LOGGER) private readonly log: Logger,
   ) {}
 
   async onModuleInit(): Promise<void> {
     const config = loadConfig();
+    const offerTimeoutSeconds = config.dispatchOfferTimeoutSeconds;
     const registry = createRegistry(config.schemaRegistryUrl);
     const kafka = new Kafka({ clientId: CONSUMER_GROUPS.READ_API_SSE, brokers: config.kafkaBrokers, logLevel: logLevel.NOTHING });
     this.consumer = kafka.consumer({ groupId: `${CONSUMER_GROUPS.READ_API_SSE}-${process.pid}` });
@@ -66,12 +74,19 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
       eachMessage: async ({ topic, message }) => {
         const envelope = await readEnvelope(registry, message);
         if (!envelope) return;
-        if (topic === TOPICS.DISPATCH_EVENTS) {
-          const view = toDispatchView(envelope);
-          if (view) this.dispatchStream.publish(envelope.tenantId, view);
-          return;
-        }
-        this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
+        await runWithObsContext(
+          { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
+          async () => {
+            if (topic === TOPICS.DISPATCH_EVENTS) {
+              const view = toDispatchView(envelope, offerTimeoutSeconds);
+              if (view) this.dispatchStream.publish(envelope.tenantId, view);
+              this.log.info({ eventType: envelope.eventType }, "consumed");
+              return;
+            }
+            this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
+            this.log.info({ eventType: envelope.eventType }, "consumed");
+          },
+        );
       },
     });
   }

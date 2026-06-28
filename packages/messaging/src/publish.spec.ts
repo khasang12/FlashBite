@@ -11,6 +11,7 @@ const envelope: EventEnvelope = {
   eventType: EVENT_TYPES.ORDER_PLACED,
   version: 1,
   occurredAt: "2026-06-19T00:00:00.000Z",
+  correlationId: "corr-test-1",
   payload: { orderId: "o-1", customerId: "c-1", items: [], totalAmount: 0 },
 };
 
@@ -39,6 +40,7 @@ describe("publish/consume helpers", () => {
             eventId: "evt-1",
             version: "1",
             occurredAt: "2026-06-19T00:00:00.000Z",
+            correlationId: "corr-test-1",
           },
         },
       ],
@@ -63,6 +65,7 @@ describe("publish/consume helpers", () => {
         eventId: Buffer.from("evt-1"),
         version: Buffer.from("1"),
         occurredAt: Buffer.from("2026-06-19T00:00:00.000Z"),
+        correlationId: Buffer.from("corr-test-1"),
       },
     };
     const result = await readEnvelope(registry, message as never);

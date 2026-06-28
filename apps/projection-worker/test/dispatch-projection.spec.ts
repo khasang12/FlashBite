@@ -82,4 +82,21 @@ describe("applyDispatchEvent", () => {
       eventId: { $in: [offered.eventId, accepted.eventId, pickedUp.eventId, delivered.eventId] },
     });
   });
+
+  it("stamps offerExpiresAt = occurredAt + offerTimeoutSeconds on an OFFERED doc", async () => {
+    const orderId = randomUUID();
+    const docId = `berlin:${orderId}`;
+    const offered = buildEnvelope<DriverOfferedPayload>({
+      tenantId: "berlin",
+      eventType: EVENT_TYPES.DRIVER_OFFERED,
+      version: 1,
+      occurredAt: "2026-06-21T00:00:00.000Z",
+      payload: { orderId, driverId: "d1" },
+    });
+    expect(await applyDispatchEvent(mongo.db, offered, 90)).toBe("applied");
+    const doc = await mongo.db.collection(READ_COLLECTIONS.DISPATCHES).findOne({ _id: docId as never });
+    expect((doc as unknown as { offerExpiresAt?: string }).offerExpiresAt).toBe("2026-06-21T00:01:30.000Z");
+    await mongo.db.collection(READ_COLLECTIONS.DISPATCHES).deleteOne({ _id: docId as never });
+    await mongo.db.collection(READ_COLLECTIONS.PROCESSED).deleteMany({ tenantId: "berlin", eventId: offered.eventId });
+  });
 });

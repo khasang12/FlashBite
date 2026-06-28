@@ -4,7 +4,7 @@ import {
   AuthGate, useAuthStore, useTenants,
   type Tenant, type DispatchView,
   toNearbyRows,
-  DISPATCH_STATUS, DISPATCH_OFFER_TIMEOUT_SECONDS,
+  DISPATCH_STATUS,
   useDispatchStream,
   acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDriverOnline,
 } from "@flashbite/web-shared";
@@ -47,7 +47,9 @@ function DriverDashboard() {
     dispatch.status === DISPATCH_STATUS.OFFERED &&
     dispatch.offeredDriverId === driverId &&
     dispatch.orderId !== dismissed &&
-    Date.now() - Date.parse(dispatch.updatedAt) < DISPATCH_OFFER_TIMEOUT_SECONDS * 1000
+    // Show the offer for its full server-stamped window (occurredAt + the effective backend offer
+    // timeout), not a hardcoded client window. Older offers without offerExpiresAt fall back to status.
+    (dispatch.offerExpiresAt ? Date.now() < Date.parse(dispatch.offerExpiresAt) : true)
       ? dispatch
       : null;
   const job: DispatchView | null =

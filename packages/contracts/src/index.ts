@@ -8,6 +8,7 @@ export interface EventEnvelope<T = unknown> {
   eventType: string;
   version: number;
   occurredAt: string;
+  correlationId: string;
   payload: T;
 }
 
@@ -203,6 +204,9 @@ export interface DispatchView {
   reason?: string;
   version: number;
   updatedAt: string;
+  /** When an OFFERED offer stops being valid (occurredAt + the effective offer timeout). The driver
+   *  UI shows/counts-down the offer against this server-stamped value, not a hardcoded client window. */
+  offerExpiresAt?: string;
 }
 
 export function dispatchAggregateId(orderId: string): string { return `dispatch:${orderId}`; }

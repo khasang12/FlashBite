@@ -1,4 +1,4 @@
-import { PrismaClient } from "@flashbite/shared";
+import { PrismaClient, newCorrelationId } from "@flashbite/shared";
 import { connectMongo } from "@flashbite/shared";
 import { READ_COLLECTIONS, type EventEnvelope } from "@flashbite/contracts";
 import { applyEvent } from "./projection";
@@ -30,6 +30,7 @@ export async function rebuildProjection(): Promise<{ events: number }> {
         version: r.version,
         occurredAt: r.occurredAt.toISOString(),
         payload: r.payload as unknown,
+        correlationId: newCorrelationId(),
       };
       if (r.aggregateType === "DISPATCH") {
         await applyDispatchEvent(db, envelope);

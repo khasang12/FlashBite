@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
+import { APP_LOGGER, type Logger } from "@flashbite/tenant-context";
 import { AppModule } from "./app.module";
 
 async function bootstrap(): Promise<void> {
@@ -8,8 +9,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   const port = Number(process.env.IDENTITY_PORT ?? 3003);
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`identity listening on ${port}`);
+  app.get<Logger>(APP_LOGGER).info(`identity listening on ${port}`);
 }
 
 bootstrap();

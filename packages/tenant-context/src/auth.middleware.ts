@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware, UnauthorizedException } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
+import { getObsContext } from "@flashbite/shared";
 import { runWithAuth } from "./auth-context";
 import { TokenVerifier } from "./token-verifier";
 
@@ -26,6 +27,8 @@ export class AuthMiddleware implements NestMiddleware {
       next(new UnauthorizedException("Invalid token"));
       return;
     }
+    const obs = getObsContext();
+    if (obs) obs.tenantId = ctx.tenantId;
     runWithAuth(ctx, () => next());
   }
 }

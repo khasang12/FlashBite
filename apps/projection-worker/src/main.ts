@@ -1,10 +1,12 @@
 import { Kafka, logLevel, type Consumer } from "kafkajs";
 import type { Db } from "mongodb";
-import { connectMongo, loadConfig } from "@flashbite/shared";
+import { connectMongo, createLogger, loadConfig, runWithObsContext } from "@flashbite/shared";
 import { CONSUMER_GROUPS, TOPICS } from "@flashbite/contracts";
 import { createRegistry, readEnvelope, type SchemaRegistry } from "@flashbite/messaging";
 import { applyEvent } from "./projection";
 import { applyDispatchEvent } from "./dispatch-projection";
+
+const log = createLogger("projection-worker");
 
 export interface ConsumerHandle {
   stop: () => Promise<void>;
@@ -18,21 +20,27 @@ export async function runConsumer(consumer: Consumer, db: Db, registry: SchemaRe
     eachMessage: async ({ message }) => {
       const envelope = await readEnvelope(registry, message);
       if (!envelope) return;
-      await applyEvent(db, envelope);
+      await runWithObsContext(
+        { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
+        async () => { await applyEvent(db, envelope); log.info({ eventType: envelope.eventType }, "projected"); },
+      );
     },
   });
   return { stop: async () => { await consumer.disconnect(); } };
 }
 
 /** Wires a kafkajs consumer to applyDispatchEvent for the dispatch-events topic. */
-export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: SchemaRegistry): Promise<ConsumerHandle> {
+export async function runDispatchConsumer(consumer: Consumer, db: Db, registry: SchemaRegistry, offerTimeoutSeconds = 30): Promise<ConsumerHandle> {
   await consumer.connect();
   await consumer.subscribe({ topic: TOPICS.DISPATCH_EVENTS, fromBeginning: false });
   await consumer.run({
     eachMessage: async ({ message }) => {
       const envelope = await readEnvelope(registry, message);
       if (!envelope) return;
-      await applyDispatchEvent(db, envelope);
+      await runWithObsContext(
+        { correlationId: envelope.correlationId, tenantId: envelope.tenantId, eventId: envelope.eventId },
+        async () => { await applyDispatchEvent(db, envelope, offerTimeoutSeconds); log.info({ eventType: envelope.eventType }, "projected"); },
+      );
     },
   });
   return { stop: async () => { await consumer.disconnect(); } };
@@ -48,10 +56,9 @@ async function main(): Promise<void> {
   const handle = await runConsumer(consumer, db, registry);
 
   const dispatchConsumer = kafka.consumer({ groupId: CONSUMER_GROUPS.DISPATCH_PROJECTION });
-  const dispatchHandle = await runDispatchConsumer(dispatchConsumer, db, registry);
+  const dispatchHandle = await runDispatchConsumer(dispatchConsumer, db, registry, config.dispatchOfferTimeoutSeconds);
 
-  // eslint-disable-next-line no-console
-  console.log("projection-worker running");
+  log.info("projection-worker running");
   const shutdown = async (): Promise<void> => {
     await handle.stop();
     await dispatchHandle.stop();
@@ -64,8 +71,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    log.error(err, "fatal");
     process.exit(1);
   });
 }
