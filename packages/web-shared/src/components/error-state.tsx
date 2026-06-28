@@ -15,10 +15,24 @@ export interface ErrorStateAction {
  * (route boundaries center it; admin renders the `banner` variant inline above the grid; merchant
  * renders the `block` variant in the content area).
  */
+function renderAction(a: ErrorStateAction | undefined, variant: "outline" | "ghost"): ReactElement | null {
+  if (!a) return null;
+  return a.href ? (
+    <Button asChild variant={variant} size="sm">
+      <a href={a.href}>{a.label}</a>
+    </Button>
+  ) : (
+    <Button variant={variant} size="sm" onClick={a.onClick}>
+      {a.label}
+    </Button>
+  );
+}
+
 export function ErrorState({
   title = "Something went wrong",
   description,
   action,
+  secondaryAction,
   icon,
   variant = "block",
   className,
@@ -26,23 +40,15 @@ export function ErrorState({
   title?: string;
   description?: string;
   action?: ErrorStateAction;
+  /** Optional second action (e.g. "Sign out") rendered next to the primary, de-emphasised. */
+  secondaryAction?: ErrorStateAction;
   icon?: ReactNode;
   variant?: "block" | "banner";
   className?: string;
 }): ReactElement {
-  const actionEl = action
-    ? action.href
-      ? (
-        <Button asChild variant="outline" size="sm">
-          <a href={action.href}>{action.label}</a>
-        </Button>
-      )
-      : (
-        <Button variant="outline" size="sm" onClick={action.onClick}>
-          {action.label}
-        </Button>
-      )
-    : null;
+  const actionEl = renderAction(action, "outline");
+  const secondaryActionEl = renderAction(secondaryAction, "ghost");
+  const hasActions = actionEl !== null || secondaryActionEl !== null;
 
   if (variant === "banner") {
     return (
@@ -58,7 +64,7 @@ export function ErrorState({
           <span className="font-semibold">{title}</span>
           {description && <span className="text-destructive/80"> — {description}</span>}
         </div>
-        {actionEl && <div className="ml-auto shrink-0">{actionEl}</div>}
+        {hasActions && <div className="ml-auto flex shrink-0 items-center gap-2">{actionEl}{secondaryActionEl}</div>}
       </div>
     );
   }
@@ -78,7 +84,7 @@ export function ErrorState({
         <h2 className="text-base font-bold">{title}</h2>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
-      {actionEl}
+      {hasActions && <div className="flex items-center gap-2">{actionEl}{secondaryActionEl}</div>}
     </div>
   );
 }

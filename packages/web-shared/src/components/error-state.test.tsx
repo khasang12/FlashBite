@@ -31,4 +31,18 @@ describe("ErrorState", () => {
     expect(alert).toHaveTextContent("Couldn't load");
     expect(alert.className).toContain("text-destructive");
   });
+
+  it("renders a secondary action alongside the primary and fires only its own handler", () => {
+    const onPrimary = vi.fn();
+    const onSecondary = vi.fn();
+    render(
+      <ErrorState
+        action={{ label: "Try again", onClick: onPrimary }}
+        secondaryAction={{ label: "Sign out", onClick: onSecondary }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(onPrimary).not.toHaveBeenCalled();
+  });
 });
