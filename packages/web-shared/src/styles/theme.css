@@ -1,30 +1,29 @@
 :root {
   --background: #ffffff;
-  --foreground: #0a0a0a;
+  --foreground: var(--gray-950);
   --card: #ffffff;
-  --card-foreground: #0a0a0a;
+  --card-foreground: var(--gray-950);
   --popover: #ffffff;
-  --popover-foreground: #0a0a0a;
-  --primary: #06c167;
+  --popover-foreground: var(--gray-950);
+  --primary: var(--brand-500);
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #0a0a0a;
-  --muted: #f5f5f5;
-  --muted-foreground: #6b7280;
-  --accent: #f5f5f5;
-  --accent-foreground: #0a0a0a;
+  --secondary: var(--gray-100);
+  --secondary-foreground: var(--gray-950);
+  --muted: var(--gray-100);
+  --muted-foreground: var(--gray-500);
+  --accent: var(--gray-100);
+  --accent-foreground: var(--gray-950);
   --destructive: #e7000b;
   --destructive-foreground: #ffffff;
-  --border: #ececec;
-  --input: #ececec;
-  --ring: #06c167;
-  --radius: 0.9rem;
+  --border: var(--gray-200);
+  --input: var(--gray-200);
+  --ring: var(--brand-500);
 
   /* FlashBite order-status palette */
   --status-placed: #b45309;
   --status-placed-bg: #fff7e6;
-  --status-accepted: #0b8a43;
-  --status-accepted-bg: #e7f9ef;
+  --status-accepted: var(--brand-600);
+  --status-accepted-bg: var(--brand-50);
   --status-cancelled: #b91c1c;
   --status-cancelled-bg: #fdecec;
 }

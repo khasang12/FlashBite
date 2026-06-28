@@ -1,0 +1,45 @@
+/* Design primitives: semantic-free scales. No role meaning — see theme.css for roles.
+   Stops consumed by semantics are fixed (visual parity); others are free choices. */
+:root {
+  /* Neutral ramp */
+  --gray-50: #fafafa;
+  --gray-100: #f5f5f5;   /* secondary / muted / accent */
+  --gray-200: #ececec;   /* border / input */
+  --gray-300: #d4d4d4;
+  --gray-400: #a3a3a3;
+  --gray-500: #6b7280;   /* muted-foreground */
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --gray-950: #0a0a0a;   /* foreground */
+
+  /* Brand ramp (FlashBite green == --brand-500) */
+  --brand-50: #e7f9ef;   /* status-accepted-bg */
+  --brand-100: #c3f0d8;
+  --brand-200: #8fe3b6;
+  --brand-300: #57d394;
+  --brand-400: #22c074;
+  --brand-500: #06c167;  /* primary / ring */
+  --brand-600: #0b8a43;  /* status-accepted */
+  --brand-700: #0a6e36;
+  --brand-800: #08562b;
+  --brand-900: #063f20;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Radius base (consumed by theme.css @theme radius-* calc()) */
+  --radius: 0.9rem;
+}
