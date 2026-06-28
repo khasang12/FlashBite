@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, Button, StatusPill,
   acceptOrder, declineOrder, cancelReasonLabel, fetchOrderPayment, ORDER_STATUS,
-  deliveryStatusLabel, getOrderDispatch,
+  deliveryStatusLabel, getOrderDispatch, toast,
   type OrderView, type DispatchView,
 } from "@flashbite/web-shared";
 
@@ -17,11 +17,9 @@ export function OrderDetailSheet({
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    setError(null);
     setBusy(false);
     setPaymentStatus(null);
     if (!order) return;
@@ -44,14 +42,15 @@ export function OrderDetailSheet({
   }, [order?.orderId]);
   const delivery = dispatch ?? dispatchFallback;
 
-  const act = async (fn: (id: string) => Promise<void>) => {
+  const act = async (fn: (id: string) => Promise<void>, successMsg: string) => {
     if (!order) return;
-    setBusy(true); setError(null);
+    setBusy(true);
     try {
       await fn(order.orderId);
       onClose(); // status flips when the saga's event arrives over SSE
+      toast.success(successMsg);
     } catch {
-      setError("Action failed. Please try again.");
+      toast.error("Couldn't update the order.");
     } finally {
       setBusy(false);
     }
@@ -91,14 +90,13 @@ export function OrderDetailSheet({
                 <span className="font-semibold">{delivery ? deliveryStatusLabel(delivery.status) : "Preparing…"}</span>
               </div>
             )}
-            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
             {order.status === ORDER_STATUS.PLACED && (
               paymentStatus === "AUTHORIZED" ? (
                 <div className="mt-6 flex gap-2">
-                  <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => act(declineOrder)}>
+                  <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => act(declineOrder, "Order declined")}>
                     {busy ? "…" : "Decline"}
                   </Button>
-                  <Button className="flex-1" disabled={busy} onClick={() => act(acceptOrder)}>
+                  <Button className="flex-1" disabled={busy} onClick={() => act(acceptOrder, "Order accepted")}>
                     {busy ? "…" : "Accept"}
                   </Button>
                 </div>
