@@ -63,7 +63,7 @@ flowchart LR
 > **Full architecture (components, sequence diagrams, data model):**
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-**Built (Phases 0–3d):**
+**Built (Phases 0–4 — all roadmap phases complete):**
 
 - **CQRS + Event Sourcing + transactional outbox** — order events + outbox row in one Postgres tx; forward-only, rebuildable Mongo projections (`pnpm rebuild:projection` replays the store).
 - **Order aggregate, ES hard mode** — `POST /orders` rehydrates the `Order` aggregate from its stream, enforces transition invariants, writes with optimistic concurrency (version check).
@@ -78,8 +78,10 @@ flowchart LR
 - **Polyglot persistence + real-time telemetry** — Postgres (event store), Mongo (read models + inbox), Redis Cluster (cache + geo, `tenant:{id}` hash tags); ephemeral driver GPS into per-tenant Redis geo, served via `GEOSEARCH`.
 - **Idempotency everywhere** — stable `eventId`, Mongo inbox dedup, Temporal `WorkflowId = tenantId:orderId`.
 - **Four Next.js frontends** — customer, merchant (live SSE), driver (Mapbox), admin, on a shared layered design-token system (primitives → semantic → Tailwind v4 `@theme`) with a catalog-driven per-tenant brand accent (`<TenantBranding/>` overrides `--primary`/`--ring` at runtime from `tenants.brand_color`), Bearer auth.
+- **Observability** — structured pino logs carrying an end-to-end `correlationId` threaded from the HTTP edge through the EventEnvelope → Kafka headers → consumers → the Temporal saga; one id greps an order's whole lifecycle across every service and worker (see [Observability](#observability-phase-4a)).
+- **Frontend resilience & polish** — per-app `error.tsx`/`not-found.tsx` boundaries + shared `ErrorState`/`EmptyState`, real loading skeletons, and `sonner` action-feedback toasts on every mutation; plus auth resilience — a single-flight token refresh shared across bootstrap/`authedFetch`/SSE, transparent refresh on an SSE 401 (instead of an abrupt logout), and an identity reuse-grace window so a reload mid-refresh doesn't revoke the session.
 
-**In progress (Phase 4):** observability (4a, done — see [Observability](#observability-phase-4a)) + frontend polish (4b — design tokens & per-tenant branding done). **Backlogged:** real Stripe (refund / webhook / read-model). See `docs/superpowers/backlog.md`.
+**Backlogged:** real Stripe (refund / webhook / read-model). See `docs/superpowers/backlog.md`.
 
 See the **current architecture** in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the original
 vision in
@@ -124,7 +126,7 @@ The master spec decomposes the build into phases, each its own plan → implemen
 | **3b** | Avro + Schema Registry on the event bus | ✅ complete |
 | **3c** | Self-built payments service (authorize/capture/void, PAYMENT_FAILED) | ✅ complete |
 | **3d** | Driver dispatch (event-sourced, saga child workflow) + driver job UI (online + live offers over SSE) + customer live driver-location map (3d-iii) + delivery tracking on customer/merchant | ✅ complete |
-| **4** | Frontend polish + observability story | 🚧 in progress |
+| **4** | Observability story + frontend polish/resilience | ✅ complete |
 
 Phase 1 was built in vertical slices: **1a** write path (event store + outbox), **1b** read path
 (projection + Redis cache + SSE), **1c-i** Temporal order-lifecycle saga, **1c-ii** driver
@@ -136,10 +138,13 @@ verified-JWT tenant/role context replacing `X-Tenant-ID` on write-api + read-api
 hard cut), **S2** Postgres RLS on the write plane, **S3** the cross-tenant operator console API, and
 **S4** frontend login (Bearer everywhere, admin via the operator endpoints).
 
-Phase 4 is being built in slices: **4a** observability (end-to-end `correlationId` tracing across
+Phase 4 was built in slices: **4a** observability (end-to-end `correlationId` tracing across
 services, workers, and the Temporal saga — see [Observability](#observability-phase-4a)), and **4b**
 frontend polish — **4b-i** layered design tokens (primitives → semantic → Tailwind `@theme`, one
-shared `global.css`) + a catalog-driven per-tenant brand accent applied at runtime.
+shared `global.css`) + catalog-driven per-tenant brand accent; **4b-ii** error/not-found boundaries +
+`ErrorState` (plus auth-resilience hardening: single-flight refresh, SSE-401 refresh, reuse-grace
+window); **4b-iii** loading skeletons + `EmptyState` unified through the shared `DataTable`; **4b-iv**
+`sonner` action-feedback toasts.
 
 ---
 
