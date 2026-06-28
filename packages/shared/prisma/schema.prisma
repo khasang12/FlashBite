@@ -66,6 +66,7 @@ model Tenant {
   lng         Float
   lat         Float
   status      String   @default("active")
+  brandColor  String?  @map("brand_color")
   createdAt   DateTime @default(now()) @map("created_at")
   @@map("tenants")
 }

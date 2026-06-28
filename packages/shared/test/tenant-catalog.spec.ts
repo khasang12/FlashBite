@@ -36,4 +36,18 @@ describe("TenantCatalogService (live DB)", () => {
     const cold = new TenantCatalogService(broken, 60000);
     await expect(cold.list()).rejects.toThrow();
   });
+
+  it("maps brandColor from the row (undefined when null)", async () => {
+    const withColor = `zzc-${Date.now()}`;
+    const without = `zzn-${Date.now()}`;
+    try {
+      await prisma.tenant.create({ data: { slug: withColor, displayName: "C", lng: 0, lat: 0, status: "active", brandColor: "#123456" } });
+      await prisma.tenant.create({ data: { slug: without, displayName: "N", lng: 0, lat: 0, status: "active" } });
+      await svc.refresh();
+      expect((await svc.get(withColor))?.brandColor).toBe("#123456");
+      expect((await svc.get(without))?.brandColor).toBeUndefined();
+    } finally {
+      await prisma.tenant.deleteMany({ where: { slug: { in: [withColor, without] } } });
+    }
+  });
 });
