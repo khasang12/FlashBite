@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { useAuthStore } from "../store/auth-store";
 import { TenantBranding } from "./tenant-branding";
