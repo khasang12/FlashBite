@@ -19,6 +19,9 @@ export interface AppConfig {
   jwtAudience: string;
   jwtAccessTtl: number;
   jwtRefreshTtl: number;
+  /** Grace window (ms) in which a just-rotated refresh token presented again is treated as a benign
+   *  race (reload during an in-flight refresh / double-submit) rather than theft — see RefreshTokenService. */
+  refreshReuseGraceMs: number;
   rtCookieName: string;
   rtCookieSecure: boolean;
   rtCookiePath: string;
@@ -81,6 +84,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     jwtAudience: env.JWT_AUDIENCE ?? "flashbite",
     jwtAccessTtl: Number(env.JWT_ACCESS_TTL ?? 900),
     jwtRefreshTtl: Number(env.JWT_REFRESH_TTL ?? 2592000),
+    refreshReuseGraceMs: Number(env.REFRESH_REUSE_GRACE_MS ?? 10000),
     rtCookieName: env.RT_COOKIE_NAME ?? "fb_rt",
     rtCookieSecure: (env.RT_COOKIE_SECURE ?? "false") === "true",
     rtCookiePath: env.RT_COOKIE_PATH ?? "/api/identity/auth",
