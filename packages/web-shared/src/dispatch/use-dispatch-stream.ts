@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import type { DispatchView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
+import { refreshAuthSession } from "../api/client";
 
 /** Pure parser for one SSE `data` payload into a DispatchView. Exported for tests. */
 export function parseDispatchData(data: string): DispatchView | null {
@@ -44,7 +45,11 @@ export function useDispatchStream(driverId: string | undefined): { dispatch: Dis
       onopen: async (response: Response) => {
         if (response.status === 401) {
           setConnected(false);
-          useAuthStore.getState().logout();
+          // An expired access token shouldn't end the session — try a refresh first; only log out
+          // if that fails. On success the store token changes, re-running this effect to reconnect
+          // with the fresh token. Either way, stop this stale-token connection.
+          const ok = await refreshAuthSession();
+          if (!ok) useAuthStore.getState().logout();
           throw new Error("unauthorized");
         }
         setConnected(true);
@@ -53,7 +58,13 @@ export function useDispatchStream(driverId: string | undefined): { dispatch: Dis
         const view = parseDispatchData(msg.data);
         if (view) setDispatch((prev) => reduceDispatch(prev, view));
       },
-      onerror: () => { setConnected(false); /* let fetchEventSource retry */ },
+      onerror: (err) => {
+        setConnected(false);
+        // A 401 is not transient — don't let fetchEventSource retry with the stale token (reconnection
+        // is driven by the token-change effect on refresh, or the login screen on logout).
+        if (err instanceof Error && err.message === "unauthorized") throw err;
+        /* transient network error: let fetchEventSource retry */
+      },
     }).catch(() => { /* aborted on unmount */ });
     return () => { ctrl.abort(); setConnected(false); };
   }, [token, driverId]);

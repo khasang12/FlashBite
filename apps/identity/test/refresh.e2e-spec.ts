@@ -6,7 +6,8 @@ import { randomUUID } from "node:crypto";
 import argon2 from "argon2";
 import { importJWK, jwtVerify } from "jose";
 import { AppModule } from "../src/app.module";
-import { PrismaService } from "@flashbite/shared";
+import { PrismaService, loadConfig } from "@flashbite/shared";
+import { RefreshTokenService } from "../src/auth/refresh-token.service";
 
 const RT = "fb_rt";
 const cookieFrom = (res: request.Response): string => {
@@ -21,7 +22,15 @@ describe("identity refresh/logout (e2e)", () => {
   const password = "devpassword";
 
   beforeAll(async () => {
-    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    // Pin the reuse-grace window to 0 for the e2e app so the "theft response" assertion below tests
+    // a hard reuse rejection (the grace path is unit-tested in refresh-token.service.spec.ts).
+    const mod = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RefreshTokenService)
+      .useFactory({
+        factory: (p: PrismaService) => new RefreshTokenService(p, { ...loadConfig(), refreshReuseGraceMs: 0 }),
+        inject: [PrismaService],
+      })
+      .compile();
     app = mod.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();

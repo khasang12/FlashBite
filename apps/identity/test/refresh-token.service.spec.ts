@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { PrismaService } from "@flashbite/shared";
+import { PrismaService, loadConfig } from "@flashbite/shared";
 import { createHash } from "node:crypto";
 import { RefreshTokenService } from "../src/auth/refresh-token.service";
 
@@ -40,15 +40,33 @@ describe("RefreshTokenService (live DB)", () => {
     expect(newRow?.familyId).toBe(oldRow?.familyId);
   });
 
-  it("reuse of a rotated token revokes the whole family", async () => {
-    const { raw } = await svc.issue(userId, tenantId);
-    const first = await svc.rotate(raw);
+  it("reuse of a rotated token beyond the grace window revokes the whole family", async () => {
+    const strict = new RefreshTokenService(prisma, { ...loadConfig(), refreshReuseGraceMs: 0 });
+    const { raw } = await strict.issue(userId, tenantId);
+    const first = await strict.rotate(raw);
     expect(first.ok).toBe(true);
-    const reuse = await svc.rotate(raw); // raw was already rotated
+    const reuse = await strict.rotate(raw); // already rotated; grace 0 => treated as theft
     expect(reuse).toEqual({ ok: false, reason: "reuse" });
     const familyId = (await prisma.refreshToken.findUnique({ where: { tokenHash: sha(raw) } }))!.familyId;
     const rows = await prisma.refreshToken.findMany({ where: { familyId } });
     expect(rows.every((r) => r.status === "revoked")).toBe(true);
+  });
+
+  it("reuse within the grace window returns a fresh successor instead of revoking (benign reload race)", async () => {
+    // Default svc has a non-zero grace window; re-presenting the just-rotated token is treated as a race.
+    const { raw } = await svc.issue(userId, tenantId);
+    const first = await svc.rotate(raw);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const graced = await svc.rotate(raw); // already rotated, but within grace
+    expect(graced.ok).toBe(true);
+    if (!graced.ok) return;
+    expect(graced.raw).not.toBe(first.raw); // a fresh successor token
+    expect(graced.userId).toBe(userId);
+    const familyId = (await prisma.refreshToken.findUnique({ where: { tokenHash: sha(raw) } }))!.familyId;
+    const rows = await prisma.refreshToken.findMany({ where: { familyId } });
+    expect(rows.some((r) => r.status === "active")).toBe(true); // family still usable
+    expect(rows.every((r) => r.status === "revoked")).toBe(false); // not revoked
   });
 
   it("rotate() of an unknown token is invalid", async () => {

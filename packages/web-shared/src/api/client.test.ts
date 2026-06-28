@@ -16,6 +16,7 @@ import {
   UnauthorizedError,
   type PlaceOrderRequest,
   goOnline, goOffline, getDriverOnline, acceptDispatch, rejectDispatch, pickupOrder, deliverOrder, getDispatchForDriver, getOrderDispatch, getMerchantDispatches, getOrderDriverLocation,
+  refreshAuthSession,
 } from "./client";
 
 const fetchMock = vi.fn();
@@ -368,5 +369,38 @@ describe("api client", () => {
   it("getOrderDriverLocation returns null when there is no location", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ location: null }), { status: 200 }));
     expect(await getOrderDriverLocation("o-2")).toBeNull();
+  });
+
+  it("refreshAuthSession stores the new token and returns true on success", async () => {
+    useAuthStore.setState({ token: null, claims: null });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ accessToken: "fresh-token" }), { status: 200 }));
+    expect(await refreshAuthSession()).toBe(true);
+    expect(useAuthStore.getState().token).toBe("fresh-token");
+    expect(lastUrl()).toBe("/api/identity/auth/refresh");
+  });
+
+  it("refreshAuthSession returns false when the refresh endpoint is unauthorized", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 401 }));
+    expect(await refreshAuthSession()).toBe(false);
+  });
+
+  it("refreshAuthSession returns false (never rejects) when the refresh fetch errors or times out", async () => {
+    fetchMock.mockRejectedValue(new Error("timeout"));
+    expect(await refreshAuthSession()).toBe(false);
+  });
+
+  it("refreshAuthSession single-flights concurrent callers into ONE /auth/refresh (bootstrap + authedFetch can't double-spend the one-time-use cookie)", async () => {
+    let refreshCalls = 0;
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/identity/auth/refresh") {
+        refreshCalls += 1;
+        return Promise.resolve(new Response(JSON.stringify({ accessToken: "shared-token" }), { status: 200 }));
+      }
+      return Promise.resolve(new Response("", { status: 200 }));
+    });
+    const [a, b] = await Promise.all([refreshAuthSession(), refreshAuthSession()]);
+    expect(a).toBe(true);
+    expect(b).toBe(true);
+    expect(refreshCalls).toBe(1);
   });
 });

@@ -1,5 +1,9 @@
 import type { OrderItem, OrderView, OrderPaymentView, DispatchView, TenantView } from "@flashbite/contracts";
-import { useAuthStore } from "../store/auth-store";
+import { useAuthStore, refreshAuthSession } from "../store/auth-store";
+
+// The single-flight refresh lives in auth-store so bootstrap, authedFetch, and the SSE hooks all
+// share ONE /auth/refresh against the one-time-use cookie. Re-exported here for the SSE hooks.
+export { refreshAuthSession };
 
 export interface PlaceOrderRequest {
   orderId: string;
@@ -38,32 +42,11 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Per-app refresh-cookie scoping: identity reads X-FB-App to pick this app's cookie name
-// (cookies ignore port, so localhost apps would otherwise share one fb_rt). See auth-store.
-const FB_APP = process.env.NEXT_PUBLIC_FB_APP;
-const fbAppHeader = (): Record<string, string> => (FB_APP ? { "X-FB-App": FB_APP } : {});
-
-/** Single-flight refresh: concurrent 401s share one /auth/refresh call. */
-let refreshing: Promise<boolean> | null = null;
-
-async function refreshSession(): Promise<boolean> {
-  const res = await fetch("/api/identity/auth/refresh", { method: "POST", credentials: "include", headers: fbAppHeader() });
-  if (!res.ok) return false;
-  const { accessToken } = (await res.json()) as { accessToken: string };
-  useAuthStore.getState().setToken(accessToken);
-  return true;
-}
-
-function ensureRefreshed(): Promise<boolean> {
-  if (!refreshing) refreshing = refreshSession().finally(() => { refreshing = null; });
-  return refreshing;
-}
-
 /** fetch + Bearer header; on 401 try ONE silent refresh + retry, else clear the session and throw. */
 async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
   let res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
   if (res.status !== 401) return res;
-  const ok = await ensureRefreshed();
+  const ok = await refreshAuthSession();
   if (ok) {
     res = await fetch(input, { ...init, headers: { ...authHeader(), ...(init.headers ?? {}) } });
     if (res.status !== 401) return res;

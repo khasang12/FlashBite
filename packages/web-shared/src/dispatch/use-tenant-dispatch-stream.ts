@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import type { DispatchView } from "@flashbite/contracts";
 import { useAuthStore } from "../store/auth-store";
-import { getMerchantDispatches } from "../api/client";
+import { getMerchantDispatches, refreshAuthSession } from "../api/client";
 import { parseDispatchData, reduceDispatch } from "./use-dispatch-stream";
 
 export type DispatchMap = Record<string, DispatchView>;
@@ -40,7 +40,10 @@ export function useTenantDispatchStream(): { dispatches: DispatchMap; connected:
       onopen: async (response: Response) => {
         if (response.status === 401) {
           setConnected(false);
-          useAuthStore.getState().logout();
+          // Refresh an expired access token before giving up the session; only log out if it fails.
+          // A successful refresh changes the store token, re-running this effect to reconnect.
+          const ok = await refreshAuthSession();
+          if (!ok) useAuthStore.getState().logout();
           throw new Error("unauthorized");
         }
         setConnected(true);
@@ -49,7 +52,11 @@ export function useTenantDispatchStream(): { dispatches: DispatchMap; connected:
         const view = parseDispatchData(msg.data);
         if (view) setDispatches((prev) => reduceDispatchMap(prev, view));
       },
-      onerror: () => { setConnected(false); /* let fetchEventSource retry */ },
+      onerror: (err) => {
+        setConnected(false);
+        if (err instanceof Error && err.message === "unauthorized") throw err; // don't retry with a stale token
+        /* transient network error: let fetchEventSource retry */
+      },
     }).catch(() => { /* aborted on unmount */ });
     return () => { cancelled = true; ctrl.abort(); setConnected(false); };
   }, [token]);

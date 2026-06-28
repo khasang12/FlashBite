@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { AuthGate, Input, useTenants } from "@flashbite/web-shared";
+import { AuthGate, Input, useTenants, ErrorState } from "@flashbite/web-shared";
 import { useAdminData } from "@/hooks/use-admin-data";
 import { AdminStream } from "@/components/tenant-stream";
 import { StatCards } from "@/components/stat-cards";
@@ -26,9 +26,13 @@ function Dashboard() {
 
       <main className="mx-auto max-w-6xl px-6 py-6">
         {errors.length > 0 && (
-          <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-            Couldn&apos;t load: {errors.join(", ")}
-          </div>
+          <ErrorState
+            variant="banner"
+            title="Couldn't load"
+            description={errors.join(", ")}
+            action={{ label: "Retry", onClick: resync }}
+            className="mb-4"
+          />
         )}
 
         <StatCards orders={orders} driversByTenant={driversByTenant} />

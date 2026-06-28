@@ -33,12 +33,26 @@ export class RefreshTokenService {
     return { raw, expiresAt };
   }
 
-  /** One-time-use rotation. Reusing a rotated/revoked token revokes the whole family (theft response). */
+  /** One-time-use rotation. Reusing a rotated/revoked token revokes the whole family (theft response),
+   *  except within a short grace window: a *recently* rotated token presented again is almost always a
+   *  benign race (a page reload during an in-flight refresh, or a double-submit) — not theft. In that
+   *  case we hand back a fresh token off the family's current active successor instead of revoking. */
   async rotate(raw: string): Promise<RotateResult> {
     await this.prune();
     const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash: this.hash(raw) } });
     if (!row) return { ok: false, reason: "invalid" };
     if (row.status !== "active") {
+      const graced =
+        row.status === "rotated" &&
+        row.rotatedAt !== null &&
+        Date.now() - row.rotatedAt.getTime() < this.cfg.refreshReuseGraceMs;
+      if (graced) {
+        const active = await this.prisma.refreshToken.findFirst({
+          where: { familyId: row.familyId, status: "active", expiresAt: { gte: new Date() } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (active) return this.rotateRow(active);
+      }
       await this.prisma.refreshToken.updateMany({
         where: { familyId: row.familyId },
         data: { status: "revoked", revokedAt: new Date() },
@@ -46,6 +60,11 @@ export class RefreshTokenService {
       return { ok: false, reason: "reuse" };
     }
     if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: "invalid" };
+    return this.rotateRow(row);
+  }
+
+  /** Mark `row` rotated and mint its active successor in the same family. */
+  private async rotateRow(row: { id: string; familyId: string; userId: string; tenantId: string }): Promise<RotateResult> {
     const raw2 = this.newRaw();
     const expiresAt = this.expiry();
     await this.prisma.$transaction([
