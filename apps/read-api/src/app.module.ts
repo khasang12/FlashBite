@@ -1,7 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { AuthMiddleware, CorrelationMiddleware, CORRELATION_LOGGER, TokenVerifier, TenantGuard } from "@flashbite/tenant-context";
-import { createLogger, PrismaService, TenantCatalogService } from "@flashbite/shared";
+import { AuthMiddleware, CorrelationMiddleware, LoggerModule, TokenVerifier, TenantGuard } from "@flashbite/tenant-context";
+import { PrismaService, TenantCatalogService } from "@flashbite/shared";
 import { HealthController } from "./health.controller";
 import { OrdersModule } from "./orders/orders.module";
 import { SseModule } from "./sse/sse.module";
@@ -11,14 +11,13 @@ import { DispatchModule } from "./dispatch/dispatch.module";
 import { TenantsModule } from "./tenants/tenants.module";
 
 @Module({
-  imports: [OrdersModule, SseModule, DriversModule, AdminModule, DispatchModule, TenantsModule],
+  imports: [LoggerModule.forRoot("read-api"), OrdersModule, SseModule, DriversModule, AdminModule, DispatchModule, TenantsModule],
   controllers: [HealthController],
   providers: [
     TokenVerifier,
     PrismaService,
     { provide: TenantCatalogService, useFactory: (p: PrismaService) => new TenantCatalogService(p), inject: [PrismaService] },
     { provide: APP_GUARD, useFactory: (catalog: TenantCatalogService) => new TenantGuard(catalog), inject: [TenantCatalogService] },
-    { provide: CORRELATION_LOGGER, useFactory: () => createLogger("read-api") },
     CorrelationMiddleware,
   ],
 })

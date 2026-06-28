@@ -5,7 +5,9 @@ import { PAYMENT_STATUS } from "@flashbite/contracts";
 
 describe("PaymentsService (live flashbite_payments)", () => {
   const prisma = new PaymentsPrismaService();
-  const svc = new PaymentsService(prisma);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const noopLog = { info() {}, error() {}, warn() {}, debug() {} } as any;
+  const svc = new PaymentsService(prisma, noopLog);
   const THRESHOLD = 100000;
   beforeAll(async () => { await prisma.$connect(); });
   afterAll(async () => { await prisma.$disconnect(); });

@@ -1,16 +1,12 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
-import { CorrelationMiddleware, CORRELATION_LOGGER } from "@flashbite/tenant-context";
-import { createLogger } from "@flashbite/shared";
+import { CorrelationMiddleware, LoggerModule } from "@flashbite/tenant-context";
 import { HealthController } from "./health.controller";
 import { PaymentsModule } from "./payments.module";
 
 @Module({
-  imports: [PaymentsModule],
+  imports: [LoggerModule.forRoot("payments"), PaymentsModule],
   controllers: [HealthController],
-  providers: [
-    { provide: CORRELATION_LOGGER, useFactory: () => createLogger("payments") },
-    CorrelationMiddleware,
-  ],
+  providers: [CorrelationMiddleware],
 })
 export class AppModule implements NestModule {
   // payments is a saga-internal service (no Bearer token) — correlation-only, NOT AuthMiddleware.

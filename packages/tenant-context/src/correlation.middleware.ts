@@ -2,8 +2,7 @@ import { Injectable, NestMiddleware, Inject } from "@nestjs/common";
 import type { Request, Response, NextFunction } from "express";
 import type { Logger } from "pino";
 import { runWithObsContext, newCorrelationId, type ObsContext } from "@flashbite/shared";
-
-export const CORRELATION_LOGGER = "CORRELATION_LOGGER";
+import { APP_LOGGER } from "./logger.module";
 
 /**
  * Mints or ingests a correlationId, binds the obsContext for the request, echoes the id on the
@@ -12,7 +11,7 @@ export const CORRELATION_LOGGER = "CORRELATION_LOGGER";
  */
 @Injectable()
 export class CorrelationMiddleware implements NestMiddleware {
-  constructor(@Inject(CORRELATION_LOGGER) private readonly log: Logger) {}
+  constructor(@Inject(APP_LOGGER) private readonly log: Logger) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
     const inbound = req.headers["x-correlation-id"];

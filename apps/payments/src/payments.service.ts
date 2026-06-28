@@ -1,10 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import { Injectable, NotFoundException, ConflictException, Inject } from "@nestjs/common";
 import { PAYMENT_STATUS, type PaymentStatus } from "@flashbite/contracts";
-import { createLogger } from "@flashbite/shared";
+import { APP_LOGGER, type Logger } from "@flashbite/tenant-context";
 import { PaymentsPrismaService } from "./payments-prisma.service";
 import { decideAuthorize, nextOnCapture, nextOnVoid, IllegalTransitionError } from "./payment-rules";
-
-const log = createLogger("payments");
 
 export interface PaymentOutcome {
   paymentId: string;
@@ -13,7 +11,10 @@ export interface PaymentOutcome {
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PaymentsPrismaService) {}
+  constructor(
+    private readonly prisma: PaymentsPrismaService,
+    @Inject(APP_LOGGER) private readonly log: Logger,
+  ) {}
 
   /** Idempotent: one payment row per (tenantId, orderId). Re-authorize returns the prior decision. */
   async authorize(
@@ -23,7 +24,7 @@ export class PaymentsService {
     declineThreshold: number,
     idempotencyKey: string,
   ): Promise<PaymentOutcome> {
-    log.info({ tenantId, orderId, amount, idempotencyKey }, "authorize");
+    this.log.info({ tenantId, orderId, amount, idempotencyKey }, "authorize");
     const existing = await this.prisma.payment.findUnique({ where: { tenantId_orderId: { tenantId, orderId } } });
     if (existing) {
       return { paymentId: existing.id, outcome: existing.status === PAYMENT_STATUS.DECLINED ? "declined" : "authorized" };
@@ -42,7 +43,7 @@ export class PaymentsService {
   }
 
   async capture(tenantId: string, orderId: string, idempotencyKey: string): Promise<PaymentOutcome> {
-    log.info({ tenantId, orderId, idempotencyKey }, "capture");
+    this.log.info({ tenantId, orderId, idempotencyKey }, "capture");
     return this.transition(tenantId, orderId, nextOnCapture, "capturedAt", "captured");
   }
 
@@ -54,7 +55,7 @@ export class PaymentsService {
   }
 
   async void(tenantId: string, orderId: string, idempotencyKey: string): Promise<PaymentOutcome> {
-    log.info({ tenantId, orderId, idempotencyKey }, "void");
+    this.log.info({ tenantId, orderId, idempotencyKey }, "void");
     return this.transition(tenantId, orderId, nextOnVoid, "voidedAt", "voided");
   }
 

@@ -1,8 +1,7 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from "@nestjs/common";
 import { Kafka, logLevel, type Consumer } from "kafkajs";
-import { createLogger, loadConfig, runWithObsContext } from "@flashbite/shared";
-
-const log = createLogger("read-api");
+import { loadConfig, runWithObsContext } from "@flashbite/shared";
+import { APP_LOGGER, type Logger } from "@flashbite/tenant-context";
 import {
   CONSUMER_GROUPS,
   DISPATCH_STATUS,
@@ -54,6 +53,7 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly stream: OrderStreamService,
     private readonly dispatchStream: DispatchStreamService,
+    @Inject(APP_LOGGER) private readonly log: Logger,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -74,11 +74,11 @@ export class SseFeederService implements OnModuleInit, OnModuleDestroy {
             if (topic === TOPICS.DISPATCH_EVENTS) {
               const view = toDispatchView(envelope);
               if (view) this.dispatchStream.publish(envelope.tenantId, view);
-              log.info({ eventType: envelope.eventType }, "consumed");
+              this.log.info({ eventType: envelope.eventType }, "consumed");
               return;
             }
             this.stream.publish(envelope.tenantId, toStreamEvent(envelope));
-            log.info({ eventType: envelope.eventType }, "consumed");
+            this.log.info({ eventType: envelope.eventType }, "consumed");
           },
         );
       },
